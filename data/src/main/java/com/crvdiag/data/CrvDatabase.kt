@@ -7,14 +7,21 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [ScanEntity::class, DriveLogEntity::class],
-    version = 2,
+    entities = [
+        ScanEntity::class, DriveLogEntity::class,
+        MaintenanceItemEntity::class, ServiceRecordEntity::class, OdometerReadingEntity::class,
+    ],
+    version = 3,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 1, to = 2)], // v2 adds drive_logs
+    autoMigrations = [
+        AutoMigration(from = 1, to = 2), // v2 adds drive_logs
+        AutoMigration(from = 2, to = 3), // v3 adds maintenance tables
+    ],
 )
 abstract class CrvDatabase : RoomDatabase() {
     abstract fun scanDao(): ScanDao
     abstract fun driveLogDao(): DriveLogDao
+    abstract fun maintenanceDao(): MaintenanceDao
 
     companion object {
         @Volatile private var instance: CrvDatabase? = null

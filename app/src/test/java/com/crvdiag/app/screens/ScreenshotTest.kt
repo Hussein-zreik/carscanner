@@ -21,9 +21,15 @@ import com.crvdiag.app.dashboard.linkSummary
 import com.crvdiag.app.live.LiveDataScreen
 import com.crvdiag.app.live.LiveUiState
 import com.crvdiag.app.live.RecordingInfo
+import com.crvdiag.app.maintenance.MaintenanceScreen
+import com.crvdiag.app.maintenance.MaintenanceViewModel
 import com.crvdiag.app.recording.LogsScreen
 import com.crvdiag.app.recording.LogsViewModel
 import com.crvdiag.data.DriveLogEntity
+import com.crvdiag.data.MaintenanceDefaults
+import com.crvdiag.data.OdometerReadingEntity
+import com.crvdiag.data.ServiceRecordEntity
+import java.time.LocalDate
 import com.crvdiag.app.live.LiveViewModel
 import com.crvdiag.obd.LiveChecks
 import com.crvdiag.obd.Pids
@@ -60,6 +66,7 @@ class ScreenshotTest {
 
     private lateinit var connection: ConnectionViewModel
     private lateinit var codes: CodesViewModel
+    private lateinit var service: MaintenanceViewModel
 
     private val report = InitReport(
         adapterId = "ELM327 v1.5",
@@ -84,6 +91,22 @@ class ScreenshotTest {
         val app = ApplicationProvider.getApplicationContext<Application>()
         connection = ConnectionViewModel(app)
         codes = CodesViewModel()
+        service = MaintenanceViewModel(app)
+        // SYNTHETIC example history: some items known, some not (owner's situation).
+        val today = LocalDate.of(2026, 11, 17)
+        fun day(daysAgo: Long) = today.minusDays(daysAgo).toEpochDay()
+        service.showPreview(
+            MaintenanceDefaults.ITEMS,
+            listOf(
+                ServiceRecordEntity(1, "oil", day(150), 148_900, "Valvoline, 0W-20"),
+                ServiceRecordEntity(2, "tire_rotation", day(150), 148_900),
+                ServiceRecordEntity(3, "atf", day(1_100), 121_500, "Drain & fill"),
+                ServiceRecordEntity(4, "brake_fluid", day(900), null),
+                ServiceRecordEntity(5, "air_filter", day(300), 145_200),
+            ),
+            listOf(OdometerReadingEntity(1, day(150), 148_900), OdometerReadingEntity(2, day(7), 153_480)),
+            today,
+        )
     }
 
     private fun shoot(name: String, destination: Destination, recording: Boolean = false, screen: @androidx.compose.runtime.Composable () -> Unit) {
@@ -107,11 +130,11 @@ class ScreenshotTest {
 
     @Test fun dashboardConnected() {
         connected()
-        shoot("1-dashboard-connected", Destination.Dashboard) { DashboardScreen(connection, codes, {}, {}) }
+        shoot("1-dashboard-connected", Destination.Dashboard) { DashboardScreen(connection, codes, service, {}, {}) }
     }
 
     @Test fun dashboardDisconnected() {
-        shoot("2-dashboard-disconnected", Destination.Dashboard) { DashboardScreen(connection, codes, {}, {}) }
+        shoot("2-dashboard-disconnected", Destination.Dashboard) { DashboardScreen(connection, codes, service, {}, {}) }
     }
 
     @Test fun codes() {
@@ -165,6 +188,10 @@ class ScreenshotTest {
             DriveLogEntity(1, day, day + 1_320_000, "drive_a.csv", "drive_a.log", 8_255),
         ))
         shoot("9-logs", Destination.Logs) { LogsScreen(vm) }
+    }
+
+    @Test fun maintenance() {
+        shoot("10-maintenance", Destination.Maintenance) { MaintenanceScreen(service) }
     }
 
     @Test fun liveMoving() {

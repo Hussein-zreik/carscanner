@@ -153,6 +153,11 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
   share (FileProvider, user-initiated) / delete, foreground service (connectedDevice) so recording
   survives screen-off; `FakeTransport` replays recordings (ReplayTest runs the real 2026-11-17 log).
   Code done, tests green; **awaiting car test**.
+- [~] Phase 4 (early, owner's choice): Maintenance tracker: miles; 10 items (oil, ATF, rear diff,
+  tire rotation, brake pads, brake fluid, air/cabin filters, coolant, spark plugs) with owner-editable
+  "whichever comes first" intervals (defaults = starting points, NOT Honda's official schedule);
+  odometer from owner readings with daily-average estimate; backwards-reading protection; Room v3
+  (auto-migration 2→3). Code done, tests green; awaiting use on the tablet.
 - Phase 1 status: all six sessions coded; Phase 1 is DONE only after a stable 20-min recorded drive.
 
 ## Notes

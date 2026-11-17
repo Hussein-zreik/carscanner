@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
@@ -41,6 +42,7 @@ enum class Destination(val label: String, val icon: ImageVector) {
     Codes("Codes", Icons.Filled.Warning),
     Live("Live data", AppIcons.Gauge),
     Logs("Logs", Icons.AutoMirrored.Filled.List),
+    Maintenance("Service", Icons.Filled.DateRange),
     Connection("Connection", AppIcons.Plug),
     Advanced("Advanced", Icons.Filled.Build),
 }

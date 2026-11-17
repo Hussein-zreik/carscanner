@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
@@ -35,6 +36,10 @@ import com.crvdiag.app.connection.CarLinkState
 import com.crvdiag.app.connection.ConnectionViewModel
 import com.crvdiag.app.connection.LinkState
 import com.crvdiag.app.connection.SavedLink
+import com.crvdiag.app.maintenance.MaintenanceState
+import com.crvdiag.app.maintenance.MaintenanceViewModel
+import com.crvdiag.app.maintenance.describe
+import com.crvdiag.app.maintenance.miles
 import com.crvdiag.app.ui.Destination
 import com.crvdiag.app.ui.components.BigValue
 import com.crvdiag.app.ui.components.MutedText
@@ -49,6 +54,7 @@ import com.crvdiag.app.ui.theme.color
 fun DashboardScreen(
     connection: ConnectionViewModel,
     codes: CodesViewModel,
+    maintenance: MaintenanceViewModel,
     onNavigate: (Destination) -> Unit,
     onQuickConnect: () -> Unit,
 ) {
@@ -56,6 +62,7 @@ fun DashboardScreen(
     val carLink by connection.carLink.collectAsState()
     val saved by connection.savedLink.collectAsState()
     val codesState by codes.state.collectAsState()
+    val service by maintenance.state.collectAsState()
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(28.dp),
@@ -73,6 +80,7 @@ fun DashboardScreen(
         }
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             val tile = Modifier.weight(1f).fillMaxHeight()
+            ServiceTile(service, { onNavigate(Destination.Maintenance) }, tile)
             BatteryTile((carLink as? CarLinkState.Ready)?.report?.voltage, tile)
             SectionCard("Live data", tile, icon = AppIcons.Gauge) {
                 BigValue("Gauges")
@@ -88,6 +96,36 @@ fun DashboardScreen(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ServiceTile(state: MaintenanceState, onOpen: () -> Unit, modifier: Modifier) {
+    val top = state.byUrgency.firstOrNull()
+    val status = when {
+        state.overdueCount > 0 -> Status.Fault
+        state.soonCount > 0 -> Status.Warning
+        state.items.isNotEmpty() && state.unknownCount == 0 -> Status.Ok
+        else -> Status.Neutral
+    }
+    SectionCard("Service", modifier, icon = Icons.Filled.DateRange, iconTint = status.color()) {
+        when {
+            state.odometer == null -> {
+                BigValue("Set up")
+                MutedText("Add an odometer reading and when items were last done.")
+            }
+            state.overdueCount > 0 || state.soonCount > 0 -> {
+                BigValue(if (state.overdueCount > 0) "${state.overdueCount} overdue" else "${state.soonCount} due soon", status)
+                top?.let { MutedText("${it.item.name}: ${it.status.describe().replaceFirstChar { c -> c.lowercase() }}") }
+                if (state.overdueCount > 0 && state.soonCount > 0) MutedText("Also ${state.soonCount} due soon.")
+            }
+            else -> {
+                BigValue(if (state.unknownCount > 0) "${state.unknownCount} unknown" else "Up to date", status)
+                MutedText("Odometer ≈ ${miles(state.odometer.miles)}")
+            }
+        }
+        Spacer(Modifier.weight(1f))
+        TextButton(onClick = onOpen) { Text("Open service") }
     }
 }
 

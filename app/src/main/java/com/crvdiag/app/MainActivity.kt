@@ -24,6 +24,8 @@ import com.crvdiag.app.dashboard.DashboardScreen
 import com.crvdiag.app.dashboard.linkSummary
 import com.crvdiag.app.live.LiveDataScreen
 import com.crvdiag.app.live.LiveViewModel
+import com.crvdiag.app.maintenance.MaintenanceScreen
+import com.crvdiag.app.maintenance.MaintenanceViewModel
 import com.crvdiag.app.recording.LogsScreen
 import com.crvdiag.app.recording.LogsViewModel
 import com.crvdiag.app.ui.AppShell
@@ -41,6 +43,8 @@ class MainActivity : ComponentActivity() {
                 val codes: CodesViewModel = viewModel()
                 val live: LiveViewModel = viewModel()
                 val logs: LogsViewModel = viewModel()
+                val maintenance: MaintenanceViewModel = viewModel()
+                LaunchedEffect(Unit) { maintenance.observe() }
                 val liveState by live.state.collectAsState()
                 var current by rememberSaveable { mutableStateOf(Destination.Dashboard) }
                 val link by connection.state.collectAsState()
@@ -58,7 +62,7 @@ class MainActivity : ComponentActivity() {
                 AppShell(current, { current = it }, linkStatus, recording = liveState.recording != null) {
                     when (current) {
                         Destination.Dashboard -> DashboardScreen(
-                            connection, codes,
+                            connection, codes, maintenance,
                             onNavigate = { current = it },
                             onQuickConnect = {
                                 // Bluetooth or Android 17+ may need a permission prompt: use the Connection screen.
@@ -72,6 +76,7 @@ class MainActivity : ComponentActivity() {
                         Destination.Codes -> CodesScreen(connection, codes, onOpenConnection = { current = Destination.Connection })
                         Destination.Live -> LiveDataScreen(connection, live)
                         Destination.Logs -> LogsScreen(logs)
+                        Destination.Maintenance -> MaintenanceScreen(maintenance)
                         Destination.Connection -> ConnectionScreen(connection)
                         Destination.Advanced -> AdvancedScreen(connection)
                     }
