@@ -24,10 +24,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.crvdiag.app.codes.CodesScreen
 import com.crvdiag.app.console.ConsoleScreen
+import com.crvdiag.app.console.ConsoleViewModel
 import com.crvdiag.app.ui.theme.CrvDiagTheme
 
-private enum class Screen { Home, Console }
+private enum class Screen { Home, Console, Codes }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -36,11 +39,24 @@ class MainActivity : ComponentActivity() {
         setContent {
             CrvDiagTheme {
                 var screen by rememberSaveable { mutableStateOf(Screen.Home) }
+                // One connection for the whole app, shared by every screen.
+                val connection: ConsoleViewModel = viewModel()
                 when (screen) {
-                    Screen.Home -> HomeScreen(onOpenConsole = { screen = Screen.Console })
+                    Screen.Home -> HomeScreen(
+                        onOpenConsole = { screen = Screen.Console },
+                        onOpenCodes = { screen = Screen.Codes },
+                    )
                     Screen.Console -> {
                         BackHandler { screen = Screen.Home }
-                        ConsoleScreen(onBack = { screen = Screen.Home })
+                        ConsoleScreen(onBack = { screen = Screen.Home }, vm = connection)
+                    }
+                    Screen.Codes -> {
+                        BackHandler { screen = Screen.Home }
+                        CodesScreen(
+                            connection = connection,
+                            onOpenConsole = { screen = Screen.Console },
+                            onBack = { screen = Screen.Home },
+                        )
                     }
                 }
             }
@@ -50,7 +66,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(onOpenConsole: () -> Unit) {
+fun HomeScreen(onOpenConsole: () -> Unit, onOpenCodes: () -> Unit) {
     Scaffold(
         topBar = { TopAppBar(title = { Text("CR-V Diag") }) },
     ) { padding ->
@@ -74,6 +90,13 @@ fun HomeScreen(onOpenConsole: () -> Unit) {
                     Button(onClick = onOpenConsole) { Text("Open adapter console") }
                 }
             }
+            Card {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Diagnostics", style = MaterialTheme.typography.titleMedium)
+                    Text("Check-engine light, stored and pending codes, readiness, freeze frame")
+                    Button(onClick = onOpenCodes) { Text("Trouble codes & readiness") }
+                }
+            }
         }
     }
 }
@@ -81,5 +104,5 @@ fun HomeScreen(onOpenConsole: () -> Unit) {
 @Preview(widthDp = 800, heightDp = 480)
 @Composable
 private fun HomeScreenPreview() {
-    CrvDiagTheme { HomeScreen(onOpenConsole = {}) }
+    CrvDiagTheme { HomeScreen(onOpenConsole = {}, onOpenCodes = {}) }
 }

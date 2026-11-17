@@ -22,7 +22,7 @@ import java.io.IOException
 class Elm327(
     private val transport: Transport,
     policy: CommandPolicy,
-    onRefused: (command: String, reason: String) -> Unit = { _, _ -> },
+    private val onRefused: (command: String, reason: String) -> Unit = { _, _ -> },
 ) {
     private val sender = GuardedSender(transport, policy, onRefused)
     private val chunks = Channel<String>(Channel.UNLIMITED)
@@ -49,17 +49,22 @@ class Elm327(
     /**
      * Sends [command] and waits for its reply. A [ElmResult.Timeout] (no '>' prompt in time)
      * is retried up to [retries] times; the clone is known to drop replies.
+     *
+     * [policy] replaces the default allow-list for this one command. Only purpose-built flows
+     * use it (e.g. the obd module's internal clear-codes policy); it never bypasses checking.
      */
     suspend fun execute(
         command: String,
         timeoutMs: Long = DEFAULT_TIMEOUT_MS,
         retries: Int = 1,
+        policy: CommandPolicy? = null,
     ): ElmResult = lock.withLock {
-        var result = executeOnce(command, timeoutMs)
+        val guard = policy?.let { GuardedSender(transport, it, onRefused) } ?: sender
+        var result = executeOnce(guard, command, timeoutMs)
         var attempt = 0
         while (result is ElmResult.Timeout && attempt < retries) {
             attempt++
-            result = executeOnce(command, timeoutMs)
+            result = executeOnce(guard, command, timeoutMs)
         }
         result
     }
@@ -69,12 +74,12 @@ class Elm327(
         data object LinkClosed : Outcome
     }
 
-    private suspend fun executeOnce(command: String, timeoutMs: Long): ElmResult {
+    private suspend fun executeOnce(guard: GuardedSender, command: String, timeoutMs: Long): ElmResult {
         // Discard anything left over (e.g. a late reply to a command that timed out).
         while (chunks.tryReceive().isSuccess) Unit
 
         val verdict = try {
-            sender.send(command)
+            guard.send(command)
         } catch (e: IOException) {
             return ElmResult.Error("Link closed: ${e.message}")
         }

@@ -105,6 +105,12 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
 - Startup: `ElmInitializer` (ATZ, ATE0, ATL0, ATS0, ATH1, ATSP, ATRV, 0100, ATDPN). First run uses
   ATSP0; a detected CAN protocol is saved (`ProtocolStore`) and later runs use ATSP<n> (no K-line probing).
   "Re-detect protocol" in the console clears it.
+- Mode 04 is allowed ONLY by `ClearCodesPolicy`, which is `internal` to the obd module and used
+  only by `CodeClearer` (checks 010C RPM = 0 from every ECU first, then ATSH7DF, then 04, no retry).
+  `Elm327.execute(policy = …)` swaps the allow-list for one command; it never skips checking.
+- One shared connection (`ConsoleViewModel`, activity-scoped) is used by every screen.
+- DTC text: `HondaDtcText` (honda, only codes seen on this car, with source) then `DtcText`
+  (obd, small generic SAE list); unknown codes say "not in the app's list" — never guessed.
 - Tests replay `testdata/` via `RecordedLog` (transport). `ScriptedAdapter` (elm tests) mimics the clone;
   its CAN headers are SYNTHETIC until an ATH1 recording exists (marked TODO(capture)).
 - Traffic log export format (future `testdata/` format): `HH:mm:ss.SSS TX|RX|INFO <text>` with `\r` escaped.
@@ -124,7 +130,9 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
 - [~] Session 3: ELM327 init + protocol detection + ECU discovery (code done, 100 unit tests green
   incl. replay of the real recording; **awaiting car test**: auto-start on Connect, protocol, ECU IDs)
 - [ ] Session 4: Mode 01 live data (10 PIDs) + gauge screen
-- [ ] Session 5: DTCs (03/07), clear (04) with confirmation, freeze frame (02)
+- [~] Session 5 (done before Session 4, owner's choice): Trouble codes screen: MIL, stored (03),
+  pending (07), readiness (0101) per ECU, freeze frame (02 frame 0), clear (04) behind dialog +
+  engine-OFF RPM check. Code done, tests green; **awaiting car test** together with Session 3.
 - [ ] Session 6: CSV logging + FakeTransport replay
 
 ## Notes

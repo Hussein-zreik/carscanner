@@ -209,6 +209,9 @@ class ConsoleViewModel(application: Application) : AndroidViewModel(application)
 
     fun clearLog() = log.clear()
 
+    /** The live driver for other screens (e.g. Trouble codes); null when not connected. */
+    fun elmOrNull(): Elm327? = elm
+
     override fun onCleared() {
         userClosed = true
     }
