@@ -112,7 +112,8 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
 - [~] Session 2: Bluetooth + Wi-Fi transports + raw console screen
   - Wi-Fi **verified on car** 2026-11-17 (ATZ/ATI/ATRV/ATDPN/0100 all answered).
   - Bluetooth **parked by user (2026-11-17)**: first attempt did not connect; cause unknown
-    (possible BLE-only adapter, single-client limit, or pairing). Resume when user re-scans; do not
+    (single-client limit or pairing likely; iPhone Car Scanner uses the adapter over Wi-Fi, so no
+    evidence of BLE-only). Resume when user re-scans; do not
     build a BLE transport without confirmation. Wi-Fi is the working link for now.
 - [ ] Session 3: ELM327 init + protocol detection logged
 - [ ] Session 4: Mode 01 live data (10 PIDs) + gauge screen
@@ -120,6 +121,14 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
 - [ ] Session 6: CSV logging + FakeTransport replay
 
 ## Notes
+- Car Scanner reference (iPhone, Wi-Fi, 2026-11-17): profile was wrongly set to "CR-V RE6 / Accord
+  Diesel" (car is RE4 gasoline) → its "SRS" result is not trustworthy. Pending P145C (EVAP purge flow,
+  per aftermarket sources), MIL off, confirmed DTCs 0. Codes were **cleared recently** by the owner →
+  Catalyst, EVAP, O2 sensor, EGR monitors incomplete. Mode 06: 0 misfires on all cylinders.
+  The clone dropped Mode 06 replies between two identical reads (evidence for retries).
+- **SRS (airbag) warning light reported NOT off with engine running (2026-11-17)** → real airbag
+  fault likely; car has front-end salvage history. App cannot read SRS until Phase 3 (K-line, MX+).
+  Owner advised to get a professional Honda-capable SRS scan.
 - Battery (ATRV, engine off, ignition on, 2026-11-17): 12.1 V → 11.8 V. Recheck resting (≥12.4 V)
   and running (13.7–14.7 V) voltage.
 - Car history: salvage-titled 2017 (front-end), repaired 2018; odometer branded "not actual" — the
