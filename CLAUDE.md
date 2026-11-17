@@ -21,6 +21,12 @@ Built in phases; read this file at the start of every session.
     own chunk; `0100` → `SEARCHING...` then replies (see `testdata/2026-11-17_wifi_first-contact.log`).
   - **Two ECUs answer `0100`** (support masks `BE3FA813` = engine-type set, `983A8003` = smaller set,
     likely the transmission side). CAN IDs unconfirmed until a run with `ATH1` (Session 3).
+  - Engine ECU (mask `BE3FA813`) supports 01,03,04,05,06,07,0B,0C,0D,0E,0F,10,11,13,15,1C,1F,20.
+    No PID 14 (upstream narrowband O2) → upstream is probably a wideband A/F sensor; confirm via `0120`.
+  - Plan: once protocol 6 is confirmed, pin `ATSP6` instead of auto-search so the adapter never
+    probes the K-line (pin 7: SRS/VSA/immobilizer) during startup.
+  - Decision pending (user): allow `ATSH7DF` and `ATSH7E0`–`ATSH7E7` only (standard OBD IDs) so
+    requests can target the engine ECU; all other ATSH values stay refused.
 - Adapter for Phase 3: OBDLink MX+ (STN chip, ELM327-compatible + extended ST commands).
 
 ## SAFETY RULES (non-negotiable)
@@ -105,7 +111,9 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
   (verified in CI-like container: `./gradlew test assembleDebug` green; not yet installed on tablet)
 - [~] Session 2: Bluetooth + Wi-Fi transports + raw console screen
   - Wi-Fi **verified on car** 2026-11-17 (ATZ/ATI/ATRV/ATDPN/0100 all answered).
-  - Bluetooth **not yet verified** (tablet BT was off). Added "Turn on Bluetooth" button + error hints.
+  - Bluetooth **parked by user (2026-11-17)**: first attempt did not connect; cause unknown
+    (possible BLE-only adapter, single-client limit, or pairing). Resume when user re-scans; do not
+    build a BLE transport without confirmation. Wi-Fi is the working link for now.
 - [ ] Session 3: ELM327 init + protocol detection logged
 - [ ] Session 4: Mode 01 live data (10 PIDs) + gauge screen
 - [ ] Session 5: DTCs (03/07), clear (04) with confirmation, freeze frame (02)
