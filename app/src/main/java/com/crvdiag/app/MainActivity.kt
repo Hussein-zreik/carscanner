@@ -24,6 +24,8 @@ import com.crvdiag.app.dashboard.DashboardScreen
 import com.crvdiag.app.dashboard.linkSummary
 import com.crvdiag.app.live.LiveDataScreen
 import com.crvdiag.app.live.LiveViewModel
+import com.crvdiag.app.recording.LogsScreen
+import com.crvdiag.app.recording.LogsViewModel
 import com.crvdiag.app.ui.AppShell
 import com.crvdiag.app.ui.Destination
 import com.crvdiag.app.ui.theme.CrvDiagTheme
@@ -38,6 +40,8 @@ class MainActivity : ComponentActivity() {
                 val connection: ConnectionViewModel = viewModel()
                 val codes: CodesViewModel = viewModel()
                 val live: LiveViewModel = viewModel()
+                val logs: LogsViewModel = viewModel()
+                val liveState by live.state.collectAsState()
                 var current by rememberSaveable { mutableStateOf(Destination.Dashboard) }
                 val link by connection.state.collectAsState()
                 val carLink by connection.carLink.collectAsState()
@@ -51,7 +55,7 @@ class MainActivity : ComponentActivity() {
 
                 if (current != Destination.Dashboard) BackHandler { current = Destination.Dashboard }
                 val linkStatus = linkSummary(link, carLink).second
-                AppShell(current, { current = it }, linkStatus) {
+                AppShell(current, { current = it }, linkStatus, recording = liveState.recording != null) {
                     when (current) {
                         Destination.Dashboard -> DashboardScreen(
                             connection, codes,
@@ -67,6 +71,7 @@ class MainActivity : ComponentActivity() {
                         )
                         Destination.Codes -> CodesScreen(connection, codes, onOpenConnection = { current = Destination.Connection })
                         Destination.Live -> LiveDataScreen(connection, live)
+                        Destination.Logs -> LogsScreen(logs)
                         Destination.Connection -> ConnectionScreen(connection)
                         Destination.Advanced -> AdvancedScreen(connection)
                     }

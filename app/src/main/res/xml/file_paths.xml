@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only the drive logs folder can be shared (user-initiated, via Android's share menu). -->
+<paths>
+    <files-path name="logs" path="logs/" />
+</paths>

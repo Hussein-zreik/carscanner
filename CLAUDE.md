@@ -108,6 +108,9 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
 - Mode 04 is allowed ONLY by `ClearCodesPolicy`, which is `internal` to the obd module and used
   only by `CodeClearer` (checks 010C RPM = 0 from every ECU first, then ATSH7DF, then 04, no retry).
   `Elm327.execute(policy = …)` swaps the allow-list for one command; it never skips checking.
+- Recording: `LiveViewModel` owns polling; it keeps polling off-screen only while recording;
+  `RecordingService` only holds foreground status (no work). Recording stops when the link drops.
+  Shared drive `.log` files are real recordings → candidates for `testdata/`.
 - Live data (`LiveDataSession`, obd): polls only while the Live screen is open, then restores ATSH7DF;
   `DiagnosticsReader` also sends ATSH7DF first. `LiveChecks` are guides with explicit conditions.
 - UI (v0.4.0): landscape, navigation rail (Dashboard, Codes, Live data, Connection, Advanced),
@@ -145,7 +148,12 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
 - [~] Session 5 (done before Session 4, owner's choice): Trouble codes screen: MIL, stored (03),
   pending (07), readiness (0101) per ECU, freeze frame (02 frame 0), clear (04) behind dialog +
   engine-OFF RPM check. Code done, tests green; **awaiting car test** together with Session 3.
-- [ ] Session 6: CSV logging + FakeTransport replay
+- [~] Session 6: drive recording: CSV (decoded, base units, UTF-8 BOM) + raw adapter log (testdata/
+  format) per drive in filesDir/logs, Room `drive_logs` (DB v2, auto-migration), Logs screen with
+  share (FileProvider, user-initiated) / delete, foreground service (connectedDevice) so recording
+  survives screen-off; `FakeTransport` replays recordings (ReplayTest runs the real 2026-11-17 log).
+  Code done, tests green; **awaiting car test**.
+- Phase 1 status: all six sessions coded; Phase 1 is DONE only after a stable 20-min recorded drive.
 
 ## Notes
 - Car Scanner reference (iPhone, Wi-Fi, 2026-11-17): profile was wrongly set to "CR-V RE6 / Accord

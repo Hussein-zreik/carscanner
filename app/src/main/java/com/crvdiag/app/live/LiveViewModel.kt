@@ -4,6 +4,10 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.crvdiag.app.connection.CarLinkState
+import com.crvdiag.app.recording.DriveRecorder
+import com.crvdiag.app.recording.RecordingService
+import com.crvdiag.data.CrvDatabase
+import com.crvdiag.data.DriveLogEntity
 import com.crvdiag.elm.Elm327
 import com.crvdiag.obd.LiveCheck
 import com.crvdiag.obd.LiveChecks
@@ -11,8 +15,11 @@ import com.crvdiag.obd.LiveDataSession
 import com.crvdiag.obd.PidValue
 import com.crvdiag.transport.TrafficLog
 import com.crvdiag.transport.TrafficLog.Direction
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,6 +27,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+
+data class RecordingInfo(val startedAtMs: Long, val rows: Int)
 
 data class LiveUiState(
     val running: Boolean = false,
@@ -31,6 +41,9 @@ data class LiveUiState(
     val multiPid: Boolean = true,
     val checks: List<LiveCheck> = emptyList(),
     val message: String? = null,
+    /** Non-null while a drive is being recorded. */
+    val recording: RecordingInfo? = null,
+    val recordingRequested: Boolean = false,
 ) {
     /** CLAUDE.md rule 5: never a screen to watch while driving. */
     val moving: Boolean get() = (values[0x0D]?.value ?: 0.0) > MOVING_KMH
@@ -41,6 +54,11 @@ data class LiveUiState(
     }
 }
 
+/**
+ * Polls the engine computer while the Live screen is open OR a drive is being recorded.
+ * Recording writes every polling cycle to CSV + the raw adapter log and keeps running in the
+ * background (RecordingService) until stopped or the link drops.
+ */
 class LiveViewModel(application: Application) : AndroidViewModel(application) {
     private val _state = MutableStateFlow(LiveUiState())
     val state: StateFlow<LiveUiState> = _state.asStateFlow()
@@ -48,17 +66,34 @@ class LiveViewModel(application: Application) : AndroidViewModel(application) {
     private val _units = MutableStateFlow(UnitPrefs.load(application))
     val units: StateFlow<UnitPrefs> = _units.asStateFlow()
 
+    private val dao by lazy { CrvDatabase.get(application).driveLogDao() }
+    private val logsDir = File(application.filesDir, "logs")
+
     private var job: Job? = null
+    private var screenVisible = false
+
+    // Recording state (touched from the polling coroutine and the main thread).
+    @Volatile private var recorder: DriveRecorder? = null
+    @Volatile private var recordId: Long? = null
+    @Volatile private var trafficLog: TrafficLog? = null
+    private val rawListener: (String) -> Unit = { line -> recorder?.rawLine(line) }
 
     fun setUnits(u: UnitPrefs) {
         _units.value = u
         UnitPrefs.save(getApplication(), u)
     }
 
+    /** The Live screen appeared or disappeared; polling continues off-screen only while recording. */
+    fun setScreenVisible(visible: Boolean) {
+        screenVisible = visible
+        if (!visible && recorder == null && !_state.value.recordingRequested) stop()
+    }
+
     fun start(elm: Elm327?, link: CarLinkState, log: TrafficLog) {
         if (job?.isActive == true) return
         val ready = link as? CarLinkState.Ready ?: return
         if (elm == null) return
+        trafficLog = log
         // The engine computer is the one reporting fuel trims + MAF (see EcuNames).
         val engine = ready.ecus.firstOrNull { 0x06 in it.supportedPids && 0x10 in it.supportedPids } ?: ready.ecus.firstOrNull()
         val session = LiveDataSession(elm, ready.report.detected?.protocol, ready.report.headersOn, engine?.requestId)
@@ -78,8 +113,10 @@ class LiveViewModel(application: Application) : AndroidViewModel(application) {
 
                 val times = ArrayDeque<Long>()
                 var emptyInARow = 0
-                while (isActive) {
+                while (isActive && !elm.closed.isCompleted) {
+                    if (_state.value.recordingRequested && recorder == null) beginRecording(pids, log)
                     val sample = session.sample(pids)
+                    recorder?.append(sample)
                     times.addLast(sample.timeMs)
                     if (times.size > 10) times.removeFirst()
                     emptyInARow = if (sample.values.isEmpty()) emptyInARow + 1 else 0
@@ -96,13 +133,20 @@ class LiveViewModel(application: Application) : AndroidViewModel(application) {
                             multiPid = session.multiPidWorks,
                             checks = LiveChecks.evaluate(history),
                             message = if (emptyInARow >= 5) "The car stopped answering. Ignition still ON?" else null,
+                            recording = recorder?.let { r -> RecordingInfo(r.startedAtMs, r.rows) },
                         )
                     }
+                    // Nothing answered: don't hammer a silent car or a dead link.
+                    if (sample.values.isEmpty()) delay(500)
                 }
+                if (elm.closed.isCompleted) log.add(Direction.INFO, "Live: link closed")
             } finally {
-                withContext(NonCancellable) { session.end() }
+                withContext(NonCancellable) {
+                    finishRecording(reason = "polling stopped")
+                    session.end()
+                }
                 log.add(Direction.INFO, "Live: stopped")
-                _state.update { it.copy(running = false, starting = false) }
+                _state.update { it.copy(running = false, starting = false, recordingRequested = false) }
             }
         }
     }
@@ -110,6 +154,58 @@ class LiveViewModel(application: Application) : AndroidViewModel(application) {
     fun stop() {
         job?.cancel()
         job = null
+    }
+
+    /** Starts polling if needed, then records every cycle until [stopRecording]. */
+    fun startRecording(elm: Elm327?, link: CarLinkState, log: TrafficLog) {
+        if (link !is CarLinkState.Ready || elm == null) return
+        _state.update { it.copy(recordingRequested = true, message = null) }
+        RecordingService.start(getApplication())
+        start(elm, link, log)
+    }
+
+    fun stopRecording() {
+        _state.update { it.copy(recordingRequested = false) }
+        viewModelScope.launch { finishRecording(reason = "stopped by user") }
+        if (!screenVisible) stop()
+    }
+
+    private suspend fun beginRecording(pids: List<Int>, log: TrafficLog) {
+        val r = DriveRecorder(logsDir, System.currentTimeMillis(), pids)
+        recorder = r
+        log.addListener(rawListener)
+        recordId = withContext(Dispatchers.IO) {
+            dao.insert(DriveLogEntity(startedAtEpochMs = r.startedAtMs, csvFile = r.csvFile.name, rawFile = r.rawFile.name))
+        }
+        log.add(Direction.INFO, "Recording: started ${r.csvFile.name}")
+    }
+
+    private suspend fun finishRecording(reason: String) {
+        val r = recorder ?: return
+        recorder = null
+        trafficLog?.let {
+            it.add(Direction.INFO, "Recording: saved ${r.csvFile.name} (${r.rows} rows, $reason)")
+            it.removeListener(rawListener)
+        }
+        val id = recordId
+        recordId = null
+        withContext(Dispatchers.IO) {
+            r.close()
+            id?.let { dao.finish(it, System.currentTimeMillis(), r.rows) }
+        }
+        RecordingService.stop(getApplication())
+        _state.update { it.copy(recording = null, message = "Drive log saved (${r.rows} rows). See Logs.") }
+    }
+
+    override fun onCleared() {
+        // App closed while recording: close files and mark the log finished (outside viewModelScope).
+        val r = recorder ?: return
+        recorder = null
+        trafficLog?.removeListener(rawListener)
+        r.close()
+        val id = recordId
+        CoroutineScope(Dispatchers.IO + NonCancellable).launch { id?.let { dao.finish(it, System.currentTimeMillis(), r.rows) } }
+        RecordingService.stop(getApplication())
     }
 
     /** Screenshot tests only. */

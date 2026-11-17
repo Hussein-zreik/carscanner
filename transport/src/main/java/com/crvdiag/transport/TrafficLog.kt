@@ -26,11 +26,20 @@ class TrafficLog(
     private val _entries = MutableStateFlow<List<Entry>>(emptyList())
     val entries: StateFlow<List<Entry>> = _entries.asStateFlow()
 
+    private val listeners = java.util.concurrent.CopyOnWriteArrayList<(String) -> Unit>()
+
     fun add(direction: Direction, text: String) {
         val entry = Entry(clock(), direction, text)
         _entries.update { (it + entry).takeLast(capacity) }
-        sink?.invoke(format(entry))
+        val line = format(entry)
+        sink?.invoke(line)
+        listeners.forEach { it(line) }
     }
+
+    /** Receives every formatted line from now on (e.g. a drive recording's raw log file). */
+    fun addListener(listener: (String) -> Unit) = listeners.add(listener)
+
+    fun removeListener(listener: (String) -> Unit) = listeners.remove(listener)
 
     fun clear() = _entries.update { emptyList() }
 

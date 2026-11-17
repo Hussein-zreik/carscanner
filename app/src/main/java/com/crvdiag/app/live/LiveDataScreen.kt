@@ -1,5 +1,10 @@
 package com.crvdiag.app.live
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -80,10 +86,22 @@ fun LiveDataScreen(connection: ConnectionViewModel, vm: LiveViewModel) {
     val carLink by connection.carLink.collectAsState()
     val ready = carLink is CarLinkState.Ready
 
-    // Poll only while this screen is open, so other screens get the adapter back.
+    // Poll while this screen is open (and in the background only while recording).
     DisposableEffect(ready) {
+        vm.setScreenVisible(true)
         if (ready) vm.start(connection.elmOrNull(), carLink, connection.log)
-        onDispose { vm.stop() }
+        onDispose { vm.setScreenVisible(false) }
+    }
+    // Android 13+: allow the "Recording a drive log" notification (recording works either way).
+    val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        vm.startRecording(connection.elmOrNull(), carLink, connection.log)
+    }
+    val context = LocalContext.current
+    val startRecording = {
+        val ask = Build.VERSION.SDK_INT >= 33 &&
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        if (ask) notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        else vm.startRecording(connection.elmOrNull(), carLink, connection.log)
     }
 
     Column(
@@ -91,6 +109,15 @@ fun LiveDataScreen(connection: ConnectionViewModel, vm: LiveViewModel) {
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         ScreenHeader("Live data", "Real-time engine readings for checks while parked.") {
+            val rec = state.recording
+            when {
+                rec != null -> {
+                    StatusPill("REC ${elapsed(rec.startedAtMs)} · ${rec.rows} rows", Status.Fault)
+                    OutlinedButton(onClick = vm::stopRecording) { Text("Stop recording") }
+                }
+                state.recordingRequested -> StatusPill("Starting recording…", Status.Busy)
+                ready -> OutlinedButton(onClick = startRecording) { Text("● Record drive") }
+            }
             FilterChip(units.fahrenheit, { vm.setUnits(units.copy(fahrenheit = !units.fahrenheit)) }, { Text("°F") })
             FilterChip(units.mph, { vm.setUnits(units.copy(mph = !units.mph)) }, { Text("mph") })
             FilterChip(units.psi, { vm.setUnits(units.copy(psi = !units.psi)) }, { Text("psi") })
@@ -111,6 +138,9 @@ fun LiveDataScreen(connection: ConnectionViewModel, vm: LiveViewModel) {
             state.moving -> MovingNotice()
             else -> {
                 state.message?.let { Text(it, color = Status.Warning.color()) }
+                if (state.recording != null) {
+                    MutedText("Recording continues if you leave this screen or turn the screen off. Stop it here when the drive is done.")
+                }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                     Column(Modifier.weight(2f), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -137,6 +167,11 @@ fun LiveDataScreen(connection: ConnectionViewModel, vm: LiveViewModel) {
     }
 }
 
+private fun elapsed(startMs: Long): String {
+    val s = ((System.currentTimeMillis() - startMs) / 1000).coerceAtLeast(0)
+    return "%d:%02d".format(s / 60, s % 60)
+}
+
 private val LiveTilesOrder = listOf(
     0x0D, 0x06, 0x07, 0x15, 0x34, 0x24, 0x44, 0x42, 0x0B, 0x10, 0x0F, 0x0E, 0x03, 0x2E, 0x2F, 0x46,
     0x3C, 0x33, 0x1F, 0x31, 0x30,
@@ -146,7 +181,7 @@ private val LiveTilesOrder = listOf(
 private fun MovingNotice() {
     SectionCard("Vehicle moving", Modifier.fillMaxWidth(), icon = Icons.Filled.Warning, iconTint = Status.Warning.color()) {
         Text("Live view is hidden while the car is moving.", style = MaterialTheme.typography.headlineSmall)
-        MutedText("Keep your eyes on the road. Readings continue in the background and reappear when you stop.")
+        MutedText("Keep your eyes on the road. Readings (and any recording) continue in the background and reappear when you stop.")
     }
 }
 

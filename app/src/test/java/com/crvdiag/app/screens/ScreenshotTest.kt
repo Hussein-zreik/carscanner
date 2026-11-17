@@ -20,6 +20,10 @@ import com.crvdiag.app.dashboard.DashboardScreen
 import com.crvdiag.app.dashboard.linkSummary
 import com.crvdiag.app.live.LiveDataScreen
 import com.crvdiag.app.live.LiveUiState
+import com.crvdiag.app.live.RecordingInfo
+import com.crvdiag.app.recording.LogsScreen
+import com.crvdiag.app.recording.LogsViewModel
+import com.crvdiag.data.DriveLogEntity
 import com.crvdiag.app.live.LiveViewModel
 import com.crvdiag.obd.LiveChecks
 import com.crvdiag.obd.Pids
@@ -82,11 +86,11 @@ class ScreenshotTest {
         codes = CodesViewModel()
     }
 
-    private fun shoot(name: String, destination: Destination, screen: @androidx.compose.runtime.Composable () -> Unit) {
+    private fun shoot(name: String, destination: Destination, recording: Boolean = false, screen: @androidx.compose.runtime.Composable () -> Unit) {
         val status = linkSummary(connection.state.value, connection.carLink.value).second
         compose.setContent {
             CrvDiagTheme {
-                AppShell(destination, {}, status) { screen() }
+                AppShell(destination, {}, status, recording) { screen() }
             }
         }
         compose.waitForIdle()
@@ -149,8 +153,18 @@ class ScreenshotTest {
     @Test fun live() {
         connected()
         val live = LiveViewModel(ApplicationProvider.getApplicationContext())
-        live.showPreviewState(liveState(0))
-        shoot("6-live", Destination.Live) { LiveDataScreen(connection, live) }
+        live.showPreviewState(liveState(0).copy(recording = RecordingInfo(System.currentTimeMillis() - 754_000, 4_812)))
+        shoot("6-live", Destination.Live, recording = true) { LiveDataScreen(connection, live) }
+    }
+
+    @Test fun logs() {
+        val vm = LogsViewModel(ApplicationProvider.getApplicationContext())
+        val day = 1_795_437_000_000L // 2026-11-17 afternoon
+        vm.showPreview(listOf(
+            DriveLogEntity(2, day + 7_200_000, day + 8_460_000, "drive_b.csv", "drive_b.log", 7_880),
+            DriveLogEntity(1, day, day + 1_320_000, "drive_a.csv", "drive_a.log", 8_255),
+        ))
+        shoot("9-logs", Destination.Logs) { LogsScreen(vm) }
     }
 
     @Test fun liveMoving() {

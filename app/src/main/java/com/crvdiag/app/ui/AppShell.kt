@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Warning
@@ -39,6 +40,7 @@ enum class Destination(val label: String, val icon: ImageVector) {
     Dashboard("Dashboard", Icons.Filled.Home),
     Codes("Codes", Icons.Filled.Warning),
     Live("Live data", AppIcons.Gauge),
+    Logs("Logs", Icons.AutoMirrored.Filled.List),
     Connection("Connection", AppIcons.Plug),
     Advanced("Advanced", Icons.Filled.Build),
 }
@@ -57,6 +59,7 @@ fun AppShell(
     current: Destination,
     onNavigate: (Destination) -> Unit,
     linkStatus: Status,
+    recording: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -81,6 +84,10 @@ fun AppShell(
             }
             Spacer(Modifier.weight(1f))
             Column(Modifier.padding(bottom = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                if (recording) {
+                    Text("● REC", style = MaterialTheme.typography.labelMedium, color = Status.Fault.color())
+                    Spacer(Modifier.height(10.dp))
+                }
                 Box(Modifier.size(10.dp).background(linkStatus.color(), CircleShape))
                 Text(railLabel(linkStatus), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
