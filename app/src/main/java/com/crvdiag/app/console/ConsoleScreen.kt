@@ -1,6 +1,9 @@
 package com.crvdiag.app.console
 
 import android.Manifest
+import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
+import android.content.Intent
 import android.content.ClipData
 import android.content.pm.PackageManager
 import android.os.Build
@@ -72,6 +75,7 @@ fun ConsoleScreen(onBack: () -> Unit, vm: ConsoleViewModel = viewModel()) {
     val state by vm.state.collectAsState()
     val entries by vm.log.entries.collectAsState()
     val paired by vm.paired.collectAsState()
+    val bluetoothOff by vm.bluetoothOff.collectAsState()
     val context = LocalContext.current
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
@@ -85,6 +89,10 @@ fun ConsoleScreen(onBack: () -> Unit, vm: ConsoleViewModel = viewModel()) {
     }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
+    ) { vm.refreshPairedDevices() }
+    // Opens Android's own "Allow app to turn on Bluetooth?" dialog.
+    val enableBluetooth = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
     ) { vm.refreshPairedDevices() }
     LaunchedEffect(Unit) {
         val missing = runtimePermissions.filter {
@@ -184,6 +192,14 @@ fun ConsoleScreen(onBack: () -> Unit, vm: ConsoleViewModel = viewModel()) {
                                     LinkType.WiFi -> host.isNotBlank() && port.toIntOrNull() in 1..65535
                                 },
                             ) { Text("Connect") }
+                        }
+                    }
+                    if (linkType == LinkType.Bluetooth && bluetoothOff) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Tablet Bluetooth is off", color = MaterialTheme.colorScheme.error)
+                            @SuppressLint("MissingPermission") // BLUETOOTH_CONNECT requested on screen open.
+                            val turnOn = { enableBluetooth.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) }
+                            Button(onClick = turnOn) { Text("Turn on Bluetooth") }
                         }
                     }
                     Text(statusText(state), style = MaterialTheme.typography.bodyMedium, color = statusColor(state))

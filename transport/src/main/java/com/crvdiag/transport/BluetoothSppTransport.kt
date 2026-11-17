@@ -7,6 +7,9 @@ import android.content.Context
 import java.io.IOException
 import java.util.UUID
 
+/** The tablet's Bluetooth radio is switched off; the user can enable it from the app. */
+class BluetoothOffException : IOException("Bluetooth is off")
+
 /** A bonded (paired) Bluetooth device, as shown in the device picker. */
 data class PairedDevice(val name: String, val address: String)
 
@@ -19,7 +22,7 @@ object BluetoothDevices {
     fun paired(context: Context): List<PairedDevice> {
         val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
             ?: throw IOException("This device has no Bluetooth")
-        if (!adapter.isEnabled) throw IOException("Bluetooth is off")
+        if (!adapter.isEnabled) throw BluetoothOffException()
         return adapter.bondedDevices
             .map { PairedDevice(it.name ?: it.address, it.address) }
             .sortedBy { it.name }
@@ -43,7 +46,7 @@ class BluetoothSppTransport(
     override fun open(): Streams {
         val adapter = appContext.getSystemService(BluetoothManager::class.java)?.adapter
             ?: throw IOException("This device has no Bluetooth")
-        if (!adapter.isEnabled) throw IOException("Bluetooth is off")
+        if (!adapter.isEnabled) throw BluetoothOffException()
         val device = adapter.getRemoteDevice(address)
 
         val connected = try {

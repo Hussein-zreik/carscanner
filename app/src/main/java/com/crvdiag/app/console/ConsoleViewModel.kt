@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.crvdiag.elm.GuardedSender
 import com.crvdiag.obd.ConsolePolicy
 import com.crvdiag.transport.BluetoothDevices
+import com.crvdiag.transport.BluetoothOffException
 import com.crvdiag.transport.BluetoothSppTransport
 import com.crvdiag.transport.LoggingTransport
 import com.crvdiag.transport.PairedDevice
@@ -44,13 +45,22 @@ class ConsoleViewModel(application: Application) : AndroidViewModel(application)
     private val _paired = MutableStateFlow<List<PairedDevice>>(emptyList())
     val paired: StateFlow<List<PairedDevice>> = _paired.asStateFlow()
 
+    private val _bluetoothOff = MutableStateFlow(false)
+    /** True when the tablet's Bluetooth radio is off; the screen offers to turn it on. */
+    val bluetoothOff: StateFlow<Boolean> = _bluetoothOff.asStateFlow()
+
     @Volatile private var transport: Transport? = null
     @Volatile private var sender: GuardedSender? = null
     @Volatile private var userClosed = false
 
     fun refreshPairedDevices() {
         _paired.value = try {
-            BluetoothDevices.paired(getApplication())
+            BluetoothDevices.paired(getApplication()).also { _bluetoothOff.value = false }
+        } catch (e: BluetoothOffException) {
+            // Log only on the transition, not on every refresh.
+            if (!_bluetoothOff.value) log.add(Direction.INFO, "Tablet Bluetooth is off")
+            _bluetoothOff.value = true
+            emptyList()
         } catch (e: SecurityException) {
             log.add(Direction.INFO, "Bluetooth permission not granted")
             emptyList()
@@ -94,7 +104,9 @@ class ConsoleViewModel(application: Application) : AndroidViewModel(application)
                 } else {
                     val msg = e.message ?: e.javaClass.simpleName
                     log.add(Direction.INFO, "Link error: $msg")
-                    _state.value = LinkState.Failed(msg)
+                    val hint = LinkErrorHints.hintFor(msg)
+                    if (hint != null) log.add(Direction.INFO, "Hint: $hint")
+                    _state.value = LinkState.Failed(hint ?: msg)
                 }
             } finally {
                 sender = null

@@ -16,7 +16,11 @@ Built in phases; read this file at the start of every session.
 - Tablet: Samsung Galaxy Tab A9+, Android 16 (API 36) — install via USB/Wireless debugging.
 - Adapter now: generic ELM327 clone "V03H4", Bluetooth Classic (SPP) + Wi-Fi.
   - Treat as unreliable: may report a fake version, drop replies, or ignore some AT commands.
-  - Wi-Fi mode: usually 192.168.0.10:35000 (adapter hotspot).
+  - Wi-Fi mode: 192.168.0.10:35000 (adapter hotspot) — **verified 2026-11-17**.
+  - Observed: `ATI` → `ELM327 v1.5` (clone version); echo is ON after `ATZ` and arrives as its
+    own chunk; `0100` → `SEARCHING...` then replies (see `testdata/2026-11-17_wifi_first-contact.log`).
+  - **Two ECUs answer `0100`** (support masks `BE3FA813` = engine-type set, `983A8003` = smaller set,
+    likely the transmission side). CAN IDs unconfirmed until a run with `ATH1` (Session 3).
 - Adapter for Phase 3: OBDLink MX+ (STN chip, ELM327-compatible + extended ST commands).
 
 ## SAFETY RULES (non-negotiable)
@@ -99,13 +103,16 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
 ## Current status
 - [x] Session 1: Android project with the 6 modules, Compose, Room, one passing test
   (verified in CI-like container: `./gradlew test assembleDebug` green; not yet installed on tablet)
-- [~] Session 2: Bluetooth + Wi-Fi transports + raw console screen (code done, tests/lint green;
-  **awaiting tablet + car verification**: BT connect, Wi-Fi connect, ATZ/ATI/ATRV/0100 replies)
+- [~] Session 2: Bluetooth + Wi-Fi transports + raw console screen
+  - Wi-Fi **verified on car** 2026-11-17 (ATZ/ATI/ATRV/ATDPN/0100 all answered).
+  - Bluetooth **not yet verified** (tablet BT was off). Added "Turn on Bluetooth" button + error hints.
 - [ ] Session 3: ELM327 init + protocol detection logged
 - [ ] Session 4: Mode 01 live data (10 PIDs) + gauge screen
 - [ ] Session 5: DTCs (03/07), clear (04) with confirmation, freeze frame (02)
 - [ ] Session 6: CSV logging + FakeTransport replay
 
 ## Notes
+- Battery (ATRV, engine off, ignition on, 2026-11-17): 12.1 V → 11.8 V. Recheck resting (≥12.4 V)
+  and running (13.7–14.7 V) voltage.
 - Car history: salvage-titled 2017 (front-end), repaired 2018; odometer branded "not actual" — the
   maintenance tracker uses the owner's own readings from 2018 onward.

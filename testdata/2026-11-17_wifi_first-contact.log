@@ -1,0 +1,51 @@
+# CR-V Diag recording #1 — first contact with the car
+# Date: 2026-11-17 · Tablet: Galaxy Tab A9+ (Android 16) · App: 0.1.0 (Session 2 console)
+# Adapter: V03H4 ELM327 clone over Wi-Fi 192.168.0.10:35000
+# Car state: engine OFF, ignition ON
+# Source: transcribed by hand from a photo of the console screen (not a clipboard export).
+# Adapter state: echo ON (ATZ default), spaces ON, headers OFF, protocol auto.
+# Findings: ATI reports "ELM327 v1.5" (clone); two ECUs answer 0100 (IDs unknown, headers off).
+# Format: HH:mm:ss.SSS TX|RX|INFO <text>, control characters escaped (\r).
+15:12:45.933 INFO Bluetooth is off
+15:14:59.653 INFO Bluetooth is off
+15:15:00.437 INFO Bluetooth is off
+15:15:02.447 INFO Bluetooth is off
+15:17:47.813 INFO Bluetooth is off
+15:22:56.626 INFO Connecting: Wi-Fi · 192.168.0.10:35000
+15:22:58.667 INFO Link error: failed to connect to /192.168.0.10 (port 35000) from /:: (port 0) after 4999ms: connect failed: ENETUNREACH (Network is unreachable)
+15:26:40.752 INFO Connecting: Wi-Fi · 192.168.0.10:35000
+15:26:40.898 INFO Connected
+15:26:54.003 TX ATZ\r
+15:26:54.868 RX \r\rELM327 v1.5\r\r>
+15:27:11.626 INFO Link error: Software caused connection abort
+15:27:38.601 INFO Connecting: Wi-Fi · 192.168.0.10:35000
+15:27:38.712 INFO Connected
+15:27:41.309 TX ATI\r
+15:27:41.341 RX ATI\r
+15:27:41.341 RX ELM327 v1.5\r\r>
+15:27:42.958 TX ATRV\r
+15:27:43.000 RX ATRV\r
+15:27:43.000 RX 12.1V\r\r>
+15:27:44.479 TX ATDPN\r
+15:27:44.514 RX ATDPN\r
+15:27:44.514 RX A0\r\r>
+15:27:45.461 TX 0100\r
+15:27:45.508 RX 0100\r
+15:27:45.966 RX SEARCHING...\r
+15:27:46.004 RX 41 00 98 3A 80 03 \r41 00 BE 3F A8 13 \r\r>
+15:27:53.314 TX ATZ\r
+15:27:53.320 RX ATZ\r
+15:27:54.128 RX \r\rELM327 v1.5\r\r>
+15:27:56.778 TX ATI\r
+15:27:56.835 RX ATI\r
+15:27:56.835 RX ELM327 v1.5\r\r>
+15:27:57.291 TX ATRV\r
+15:27:57.352 RX ATRV\r
+15:27:57.352 RX 11.8V\r\r>
+15:27:57.719 TX ATDPN\r
+15:27:57.761 RX ATDPN\r
+15:27:57.761 RX A0\r\r>
+15:27:58.148 TX 0100\r
+15:27:58.191 RX 0100\r
+15:27:58.371 RX SEARCHING...\r
+15:27:58.575 RX 41 00 98 3A 80 03 \r41 00 BE 3F A8 13 \r\r>
