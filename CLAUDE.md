@@ -108,6 +108,8 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
 - Mode 04 is allowed ONLY by `ClearCodesPolicy`, which is `internal` to the obd module and used
   only by `CodeClearer` (checks 010C RPM = 0 from every ECU first, then ATSH7DF, then 04, no retry).
   `Elm327.execute(policy = …)` swaps the allow-list for one command; it never skips checking.
+- Live data (`LiveDataSession`, obd): polls only while the Live screen is open, then restores ATSH7DF;
+  `DiagnosticsReader` also sends ATSH7DF first. `LiveChecks` are guides with explicit conditions.
 - UI (v0.4.0): landscape, navigation rail (Dashboard, Codes, Live data, Connection, Advanced),
   clean modern dark theme with `Status` colours (ui/theme), shared components (ui/components).
   One activity-scoped `ConnectionViewModel` + `CodesViewModel` shared by all screens; codes are read
@@ -136,7 +138,10 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
     build a BLE transport without confirmation. Wi-Fi is the working link for now.
 - [~] Session 3: ELM327 init + protocol detection + ECU discovery (code done, 100 unit tests green
   incl. replay of the real recording; **awaiting car test**: auto-start on Connect, protocol, ECU IDs)
-- [ ] Session 4: Mode 01 live data (10 PIDs) + gauge screen
+- [~] Session 4: Live data screen: engine ECU only (ATSH7E0), multi-PID requests (≤6, auto-fallback to
+  single), 0100/0120/0140 discovery, 4 dial gauges + tiles with sparklines, quick checks (trims,
+  charging, upstream λ, downstream O2, coolant), units °C/°F·km/h/mph·kPa/psi (default °C, mph, psi),
+  hidden while speed > 5 km/h (rule 5). Code done, tests green; **awaiting car test**.
 - [~] Session 5 (done before Session 4, owner's choice): Trouble codes screen: MIL, stored (03),
   pending (07), readiness (0101) per ECU, freeze frame (02 frame 0), clear (04) behind dialog +
   engine-OFF RPM check. Code done, tests green; **awaiting car test** together with Session 3.

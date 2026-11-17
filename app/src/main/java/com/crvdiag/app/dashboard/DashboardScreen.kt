@@ -74,9 +74,11 @@ fun DashboardScreen(
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             val tile = Modifier.weight(1f).fillMaxHeight()
             BatteryTile((carLink as? CarLinkState.Ready)?.report?.voltage, tile)
-            SectionCard("Live gauges", tile, icon = AppIcons.Gauge) {
-                BigValue("Next update")
-                MutedText("RPM, temperatures, fuel trims, O2 sensors and charging voltage, live on screen.")
+            SectionCard("Live data", tile, icon = AppIcons.Gauge) {
+                BigValue("Gauges")
+                MutedText("RPM, temperatures, fuel trims, O2 sensors and charging voltage, with quick checks. Use while parked.")
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = { onNavigate(Destination.Live) }) { Text("Open live data") }
             }
             SectionCard("Airbag, ABS & tire pressure", tile, icon = Icons.Filled.Info, iconTint = Status.Warning.color()) {
                 BigValue("Not readable", Status.Warning)

@@ -36,6 +36,9 @@ class DiagnosticsReader(
                 is ElmResult.Error -> emptyList<EcuMessage>().also { problems += "$what: ${r.message}" }
             }
 
+        // Live data may have left the adapter addressing one unit: talk to all of them again.
+        if (protocol?.isCan == true) elm.execute("ATSH7DF")
+
         onStep("Readiness (0101)")
         val readiness = messages("0101", "Readiness")
             .mapNotNull { m -> Readiness.fromMessage(m)?.let { m.ecu to it } }.toMap()

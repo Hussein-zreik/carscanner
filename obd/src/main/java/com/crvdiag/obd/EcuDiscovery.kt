@@ -64,5 +64,14 @@ object EcuDiscovery {
         else -> null
     }
 
+    /** Inverse of [requestIdFor]: 7E0 → 7E8. */
+    fun responseIdFor(requestId: String): String? = when {
+        requestId.length == 3 && requestId.uppercase() in REQUEST_11 -> (requestId.toInt(16) + 8).toString(16).uppercase()
+        requestId.length == 8 && requestId.uppercase().startsWith("18DA") && requestId.uppercase().endsWith("F1") ->
+            "18DAF1" + requestId.substring(4, 6).uppercase()
+        else -> null
+    }
+
+    private val REQUEST_11 = (0x7E0..0x7E7).map { it.toString(16).uppercase() }.toSet()
     private val RESPONSE_11 = (0x7E8..0x7EF).map { it.toString(16).uppercase() }.toSet()
 }

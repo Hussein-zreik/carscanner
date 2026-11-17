@@ -19,6 +19,10 @@ import com.crvdiag.app.console.AdvancedScreen
 import com.crvdiag.app.dashboard.DashboardScreen
 import com.crvdiag.app.dashboard.linkSummary
 import com.crvdiag.app.live.LiveDataScreen
+import com.crvdiag.app.live.LiveUiState
+import com.crvdiag.app.live.LiveViewModel
+import com.crvdiag.obd.LiveChecks
+import com.crvdiag.obd.Pids
 import com.crvdiag.app.ui.AppShell
 import com.crvdiag.app.ui.Destination
 import com.crvdiag.app.ui.theme.CrvDiagTheme
@@ -124,8 +128,36 @@ class ScreenshotTest {
         shoot("5-connection-ready", Destination.Connection) { ConnectionScreen(connection) }
     }
 
+    /** Warm idle, values in the range seen on this car (SYNTHETIC). */
+    private fun liveState(speedKmh: Int): LiveUiState {
+        val raw = mapOf(
+            0x0C to listOf(0x0D, 0x48), 0x05 to listOf(0x7F), 0x04 to listOf(0x40), 0x11 to listOf(0x2B),
+            0x0D to listOf(speedKmh), 0x06 to listOf(0x82), 0x07 to listOf(0x7D), 0x15 to listOf(0x8C, 0xFF),
+            0x34 to listOf(0x80, 0x00, 0x80, 0x00), 0x42 to listOf(0x37, 0x78), 0x0B to listOf(0x1E),
+            0x10 to listOf(0x01, 0x2C), 0x0F to listOf(0x48), 0x0E to listOf(0x8C), 0x03 to listOf(0x02, 0x00),
+            0x2E to listOf(0x26), 0x2F to listOf(0x9A), 0x46 to listOf(0x3A),
+        )
+        val values = raw.mapValues { (pid, bytes) -> Pids.decode(pid, bytes)!! }
+        val history = values.mapValues { (pid, v) ->
+            val base = v.value ?: 0.0
+            List(60) { i -> if (pid == 0x15) 0.68 + 0.04 * kotlin.math.sin(i / 4.0) else base * (1 + 0.03 * kotlin.math.sin(i / 5.0)) }
+        }
+        return LiveUiState(running = true, values = values, history = history, updatesPerSecond = 6.4,
+            checks = LiveChecks.evaluate(history))
+    }
+
     @Test fun live() {
-        shoot("6-live", Destination.Live) { LiveDataScreen() }
+        connected()
+        val live = LiveViewModel(ApplicationProvider.getApplicationContext())
+        live.showPreviewState(liveState(0))
+        shoot("6-live", Destination.Live) { LiveDataScreen(connection, live) }
+    }
+
+    @Test fun liveMoving() {
+        connected()
+        val live = LiveViewModel(ApplicationProvider.getApplicationContext())
+        live.showPreviewState(liveState(60))
+        shoot("8-live-moving", Destination.Live) { LiveDataScreen(connection, live) }
     }
 
     @Test fun advanced() {

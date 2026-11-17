@@ -23,6 +23,7 @@ import com.crvdiag.app.console.AdvancedScreen
 import com.crvdiag.app.dashboard.DashboardScreen
 import com.crvdiag.app.dashboard.linkSummary
 import com.crvdiag.app.live.LiveDataScreen
+import com.crvdiag.app.live.LiveViewModel
 import com.crvdiag.app.ui.AppShell
 import com.crvdiag.app.ui.Destination
 import com.crvdiag.app.ui.theme.CrvDiagTheme
@@ -36,6 +37,7 @@ class MainActivity : ComponentActivity() {
                 // Activity-scoped: one connection and one codes state shared by every screen.
                 val connection: ConnectionViewModel = viewModel()
                 val codes: CodesViewModel = viewModel()
+                val live: LiveViewModel = viewModel()
                 var current by rememberSaveable { mutableStateOf(Destination.Dashboard) }
                 val link by connection.state.collectAsState()
                 val carLink by connection.carLink.collectAsState()
@@ -64,7 +66,7 @@ class MainActivity : ComponentActivity() {
                             },
                         )
                         Destination.Codes -> CodesScreen(connection, codes, onOpenConnection = { current = Destination.Connection })
-                        Destination.Live -> LiveDataScreen()
+                        Destination.Live -> LiveDataScreen(connection, live)
                         Destination.Connection -> ConnectionScreen(connection)
                         Destination.Advanced -> AdvancedScreen(connection)
                     }

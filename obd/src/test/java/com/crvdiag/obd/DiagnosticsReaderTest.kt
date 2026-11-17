@@ -15,6 +15,7 @@ class DiagnosticsReaderTest {
         "03" to "7E8024300\r7E9024300\r\r",
         "07" to "7E804470114 5C\r7E9024700\r\r",
         "020200" to "7E8054202000000\r\r",
+        "ATSH7DF" to "OK\r\r",
     )
 
     private suspend fun kotlinx.coroutines.test.TestScope.read(replies: Map<String, String>): Pair<FakeCar, DiagnosticsReport> {
@@ -26,7 +27,7 @@ class DiagnosticsReaderTest {
     @Test
     fun `reads readiness, stored and pending codes per ECU`() = runTest {
         val (fake, report) = read(car)
-        assertEquals(listOf("0101", "03", "07", "020200"), fake.sent)
+        assertEquals(listOf("ATSH7DF", "0101", "03", "07", "020200"), fake.sent)
         assertEquals(4, report.readiness.getValue("7E8").incomplete.size)
         assertEquals(mapOf("7E8" to emptyList<String>(), "7E9" to emptyList()), report.stored)
         assertEquals(listOf("P145C"), report.pending.getValue("7E8"))
