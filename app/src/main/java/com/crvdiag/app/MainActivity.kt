@@ -5,32 +5,27 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.crvdiag.app.codes.CodesScreen
-import com.crvdiag.app.console.ConsoleScreen
-import com.crvdiag.app.console.ConsoleViewModel
+import com.crvdiag.app.codes.CodesState
+import com.crvdiag.app.codes.CodesViewModel
+import com.crvdiag.app.connection.CarLinkState
+import com.crvdiag.app.connection.ConnectionScreen
+import com.crvdiag.app.connection.ConnectionViewModel
+import com.crvdiag.app.connection.SavedLink
+import com.crvdiag.app.console.AdvancedScreen
+import com.crvdiag.app.dashboard.DashboardScreen
+import com.crvdiag.app.dashboard.linkSummary
+import com.crvdiag.app.live.LiveDataScreen
+import com.crvdiag.app.ui.AppShell
+import com.crvdiag.app.ui.Destination
 import com.crvdiag.app.ui.theme.CrvDiagTheme
-
-private enum class Screen { Home, Console, Codes }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,71 +33,43 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             CrvDiagTheme {
-                var screen by rememberSaveable { mutableStateOf(Screen.Home) }
-                // One connection for the whole app, shared by every screen.
-                val connection: ConsoleViewModel = viewModel()
-                when (screen) {
-                    Screen.Home -> HomeScreen(
-                        onOpenConsole = { screen = Screen.Console },
-                        onOpenCodes = { screen = Screen.Codes },
-                    )
-                    Screen.Console -> {
-                        BackHandler { screen = Screen.Home }
-                        ConsoleScreen(onBack = { screen = Screen.Home }, vm = connection)
+                // Activity-scoped: one connection and one codes state shared by every screen.
+                val connection: ConnectionViewModel = viewModel()
+                val codes: CodesViewModel = viewModel()
+                var current by rememberSaveable { mutableStateOf(Destination.Dashboard) }
+                val link by connection.state.collectAsState()
+                val carLink by connection.carLink.collectAsState()
+
+                // Read codes automatically once the car link is ready (read-only requests).
+                LaunchedEffect(carLink) {
+                    if (carLink is CarLinkState.Ready && codes.state.value !is CodesState.Busy) {
+                        codes.read(connection.elmOrNull(), carLink, connection.log)
                     }
-                    Screen.Codes -> {
-                        BackHandler { screen = Screen.Home }
-                        CodesScreen(
-                            connection = connection,
-                            onOpenConsole = { screen = Screen.Console },
-                            onBack = { screen = Screen.Home },
+                }
+
+                if (current != Destination.Dashboard) BackHandler { current = Destination.Dashboard }
+                val linkStatus = linkSummary(link, carLink).second
+                AppShell(current, { current = it }, linkStatus) {
+                    when (current) {
+                        Destination.Dashboard -> DashboardScreen(
+                            connection, codes,
+                            onNavigate = { current = it },
+                            onQuickConnect = {
+                                // Bluetooth or Android 17+ may need a permission prompt: use the Connection screen.
+                                if (connection.savedLink.value is SavedLink.Wifi && android.os.Build.VERSION.SDK_INT < 37) {
+                                    connection.connectLast()
+                                } else {
+                                    current = Destination.Connection
+                                }
+                            },
                         )
+                        Destination.Codes -> CodesScreen(connection, codes, onOpenConnection = { current = Destination.Connection })
+                        Destination.Live -> LiveDataScreen()
+                        Destination.Connection -> ConnectionScreen(connection)
+                        Destination.Advanced -> AdvancedScreen(connection)
                     }
                 }
             }
         }
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun HomeScreen(onOpenConsole: () -> Unit, onOpenCodes: () -> Unit) {
-    Scaffold(
-        topBar = { TopAppBar(title = { Text("CR-V Diag") }) },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Card {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("2011 Honda CR-V EX 4WD", style = MaterialTheme.typography.titleMedium)
-                    Text("2.4L K24Z6 · 5-speed automatic", style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-            Card {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Adapter", style = MaterialTheme.typography.titleMedium)
-                    Text("Bluetooth (paired V03H4) or Wi-Fi (192.168.0.10:35000)")
-                    Button(onClick = onOpenConsole) { Text("Open adapter console") }
-                }
-            }
-            Card {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Diagnostics", style = MaterialTheme.typography.titleMedium)
-                    Text("Check-engine light, stored and pending codes, readiness, freeze frame")
-                    Button(onClick = onOpenCodes) { Text("Trouble codes & readiness") }
-                }
-            }
-        }
-    }
-}
-
-@Preview(widthDp = 800, heightDp = 480)
-@Composable
-private fun HomeScreenPreview() {
-    CrvDiagTheme { HomeScreen(onOpenConsole = {}, onOpenCodes = {}) }
 }

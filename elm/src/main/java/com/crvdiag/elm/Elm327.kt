@@ -76,7 +76,9 @@ class Elm327(
 
     private suspend fun executeOnce(guard: GuardedSender, command: String, timeoutMs: Long): ElmResult {
         // Discard anything left over (e.g. a late reply to a command that timed out).
-        while (chunks.tryReceive().isSuccess) Unit
+        while (chunks.tryReceive().isSuccess) {
+            // discard
+        }
 
         val verdict = try {
             guard.send(command)

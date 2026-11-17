@@ -2,7 +2,7 @@ package com.crvdiag.app.codes
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.crvdiag.app.console.CarLinkState
+import com.crvdiag.app.connection.CarLinkState
 import com.crvdiag.elm.Elm327
 import com.crvdiag.obd.ClearOutcome
 import com.crvdiag.obd.CodeClearer
@@ -27,6 +27,11 @@ class CodesViewModel : ViewModel() {
     val state: StateFlow<CodesState> = _state.asStateFlow()
 
     private val busy get() = _state.value is CodesState.Busy
+
+    /** Screenshot tests only: show a given state without a car. */
+    internal fun showPreviewState(state: CodesState) {
+        _state.value = state
+    }
 
     fun read(elm: Elm327?, link: CarLinkState, log: TrafficLog, clearMessage: String? = null) {
         if (busy) return

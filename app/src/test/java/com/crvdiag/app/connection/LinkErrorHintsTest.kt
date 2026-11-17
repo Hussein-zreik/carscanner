@@ -1,4 +1,4 @@
-package com.crvdiag.app.console
+package com.crvdiag.app.connection
 
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue

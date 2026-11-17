@@ -3,23 +3,29 @@ package com.crvdiag.app.codes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -28,71 +34,67 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.crvdiag.app.console.CarLinkState
-import com.crvdiag.app.console.ConsoleViewModel
+import com.crvdiag.app.connection.CarLinkState
+import com.crvdiag.app.connection.ConnectionViewModel
+import com.crvdiag.app.ui.EcuNames
+import com.crvdiag.app.ui.components.BigValue
+import com.crvdiag.app.ui.components.MutedText
+import com.crvdiag.app.ui.components.ScreenHeader
+import com.crvdiag.app.ui.components.SectionCard
+import com.crvdiag.app.ui.theme.Status
+import com.crvdiag.app.ui.theme.color
 import com.crvdiag.honda.HondaDtcText
 import com.crvdiag.obd.DiagnosticsReport
 import com.crvdiag.obd.DtcText
+import com.crvdiag.obd.EcuInfo
 import com.crvdiag.obd.Readiness
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** The unit with the most self-tests (the engine side on this car). */
+fun mainReadiness(report: DiagnosticsReport): Readiness? =
+    report.readiness.values.maxByOrNull { r -> r.monitors.count { it.available } }
+
 @Composable
-fun CodesScreen(
-    connection: ConsoleViewModel,
-    onOpenConsole: () -> Unit,
-    onBack: () -> Unit,
-    vm: CodesViewModel = viewModel(),
-) {
-    val state by vm.state.collectAsState()
+fun CodesScreen(connection: ConnectionViewModel, codes: CodesViewModel, onOpenConnection: () -> Unit) {
+    val state by codes.state.collectAsState()
     val carLink by connection.carLink.collectAsState()
-    var showClearDialog by remember { mutableStateOf(false) }
-    val connected = carLink is CarLinkState.Ready
+    val ready = carLink as? CarLinkState.Ready
     val busy = state is CodesState.Busy
+    var showClearDialog by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Trouble codes & readiness") },
-                navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
-            )
-        },
-    ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).padding(16.dp).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            if (!connected) {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Not connected to the car", style = MaterialTheme.typography.titleMedium)
-                        Text("Connect in the adapter console first (engine OFF, ignition ON is fine for reading).")
-                        Button(onClick = onOpenConsole) { Text("Open adapter console") }
-                    }
-                }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(28.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+    ) {
+        ScreenHeader("Trouble codes", "What the car's computers have noticed. Reading never changes anything.") {
+            Button(onClick = { codes.read(connection.elmOrNull(), carLink, connection.log) }, enabled = ready != null && !busy) {
+                Icon(Icons.Filled.Refresh, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(if (state is CodesState.Done) "Read again" else "Read codes")
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Button(
-                    onClick = { vm.read(connection.elmOrNull(), carLink, connection.log) },
-                    enabled = connected && !busy,
-                ) { Text("Read codes") }
-                OutlinedButton(
-                    onClick = { showClearDialog = true },
-                    enabled = connected && !busy && state is CodesState.Done,
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                ) { Text("Clear codes…") }
-            }
+            OutlinedButton(
+                onClick = { showClearDialog = true },
+                enabled = ready != null && !busy && state is CodesState.Done,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            ) { Text("Clear codes…") }
+        }
 
-            when (val s = state) {
-                CodesState.Idle -> Text("Tap Read codes. Reading never changes anything in the car.")
-                is CodesState.Busy -> Text("Working… ${s.step}")
-                is CodesState.Error -> Text(s.message, color = MaterialTheme.colorScheme.error)
-                is CodesState.Done -> {
-                    s.clearMessage?.let { Text(it, fontWeight = FontWeight.Bold) }
-                    ReportView(s.report)
-                }
+        if (ready == null) {
+            SectionCard("Not connected", icon = Icons.Filled.Info) {
+                MutedText("Connect to the car first. Engine OFF with ignition ON is fine for reading codes.")
+                Button(onClick = onOpenConnection) { Text("Go to Connection") }
+            }
+        }
+
+        when (val s = state) {
+            CodesState.Idle -> if (ready != null) MutedText("Tap Read codes.")
+            is CodesState.Busy -> MutedText("Reading… ${s.step}")
+            is CodesState.Error -> Text(s.message, color = MaterialTheme.colorScheme.error)
+            is CodesState.Done -> {
+                s.clearMessage?.let { SectionCard("Clear codes result", icon = Icons.Filled.Info) { Text(it) } }
+                ReportView(s.report, ready?.ecus.orEmpty())
             }
         }
     }
@@ -101,7 +103,7 @@ fun CodesScreen(
         ClearCodesDialog(
             onConfirm = {
                 showClearDialog = false
-                vm.clear(connection.elmOrNull(), carLink, connection.log)
+                codes.clear(connection.elmOrNull(), carLink, connection.log)
             },
             onDismiss = { showClearDialog = false },
         )
@@ -111,91 +113,133 @@ fun CodesScreen(
 private fun describe(code: String) = HondaDtcText.describe(code) ?: DtcText.describe(code)
 
 @Composable
-private fun ReportView(report: DiagnosticsReport) {
+private fun ReportView(report: DiagnosticsReport, ecus: List<EcuInfo>) {
     val mil = report.readiness.values.any { it.milOn }
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                if (mil) "Check-engine light: ON" else "Check-engine light: OFF",
-                style = MaterialTheme.typography.titleMedium,
-                color = if (mil) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            SectionCard(
+                "Check-engine light", Modifier.fillMaxWidth(),
+                icon = if (mil) Icons.Filled.Warning else Icons.Filled.CheckCircle,
+                iconTint = (if (mil) Status.Fault else Status.Ok).color(),
+            ) {
+                BigValue(if (mil) "ON" else "OFF", if (mil) Status.Fault else Status.Ok)
+                MutedText(
+                    if (mil) "The car has confirmed a fault. See the stored codes below."
+                    else "No confirmed fault is turning the light on.",
+                )
+                report.problems.forEach {
+                    Text("Some data could not be read: $it", color = Status.Warning.color(), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            CodeList(
+                "Stored codes", "Confirmed faults. These turn the check-engine light on.",
+                report.stored, ecus, Status.Fault, "No stored codes",
             )
-            report.problems.forEach { Text("⚠ $it (data may be incomplete)", color = MaterialTheme.colorScheme.tertiary) }
+            CodeList(
+                "Pending codes", "Seen once, not confirmed yet. They clear themselves if the problem doesn't return.",
+                report.pending, ecus, Status.Warning, "No pending codes",
+            )
         }
-    }
-    CodeSection("Stored (confirmed) codes", report.stored, "No stored codes")
-    CodeSection("Pending codes (seen once, not confirmed)", report.pending, "No pending codes")
-    report.readiness.forEach { (ecu, r) -> ReadinessCard(ecu, r) }
-    report.freezeFrames.forEach { (ecu, frame) ->
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Freeze frame · $ecu · set by ${frame.dtc}", style = MaterialTheme.typography.titleMedium)
-                frame.values.forEach { Text("${it.name}: ${it.display()}") }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            mainReadiness(report)?.let { SelfTests(it) }
+            report.freezeFrames.forEach { (ecu, frame) ->
+                SectionCard("Snapshot when ${frame.dtc} was set", Modifier.fillMaxWidth(), icon = Icons.Filled.Info) {
+                    MutedText("Freeze frame from the ${EcuNames.label(ecu, ecus).lowercase()}.")
+                    frame.values.forEach { v ->
+                        Row(Modifier.fillMaxWidth()) {
+                            Text(v.name, Modifier.weight(1f))
+                            Text(v.display(), fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun CodeSection(title: String, codes: Map<String, List<String>>, empty: String) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            val all = codes.flatMap { (ecu, list) -> list.map { ecu to it } }
-            if (all.isEmpty()) Text(empty)
-            all.forEach { (ecu, code) ->
-                Text("$code · ${describe(code)}", fontWeight = FontWeight.Bold)
-                Text("from $ecu", style = MaterialTheme.typography.bodySmall)
+private fun CodeList(
+    title: String,
+    explanation: String,
+    codes: Map<String, List<String>>,
+    ecus: List<EcuInfo>,
+    status: Status,
+    empty: String,
+) {
+    val all = codes.flatMap { (ecu, list) -> list.map { ecu to it } }
+    SectionCard(title, Modifier.fillMaxWidth(), icon = if (all.isEmpty()) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+        iconTint = (if (all.isEmpty()) Status.Ok else status).color()) {
+        MutedText(explanation)
+        if (all.isEmpty()) Text(empty, color = Status.Ok.color())
+        all.forEach { (ecu, code) ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(shape = MaterialTheme.shapes.small, color = status.color().copy(alpha = 0.15f)) {
+                    Text(
+                        code, Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = status.color(),
+                    )
+                }
+                Spacer(Modifier.width(14.dp))
+                Column {
+                    Text(describe(code), style = MaterialTheme.typography.bodyLarge)
+                    MutedText(EcuNames.label(ecu, ecus))
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ReadinessCard(ecu: String, r: Readiness) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text("Readiness self-tests · $ecu", style = MaterialTheme.typography.titleMedium)
-            Text("Codes reported by this unit: ${r.dtcCount}", style = MaterialTheme.typography.bodySmall)
-            r.monitors.filter { it.available }.forEach { m ->
-                Text(
-                    "${if (m.complete) "✅" else "⏳"} ${m.name}: ${if (m.complete) "complete" else "not complete yet"}",
-                    color = if (m.complete) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.tertiary,
+private fun SelfTests(r: Readiness) {
+    val available = r.monitors.filter { it.available }
+    val done = available.count { it.complete }
+    val status = if (done == available.size) Status.Ok else Status.Warning
+    SectionCard("Emission self-tests", Modifier.fillMaxWidth(), icon = Icons.Filled.CheckCircle, iconTint = status.color()) {
+        BigValue("$done of ${available.size} done", status)
+        MutedText(
+            "The car tests its own emission systems while you drive. After codes are cleared or the battery " +
+                "is disconnected, these start over.",
+        )
+        available.forEach { m ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    if (m.complete) Icons.Filled.CheckCircle else Icons.Filled.Info, null,
+                    tint = (if (m.complete) Status.Ok else Status.Warning).color(), modifier = Modifier.size(20.dp),
                 )
+                Spacer(Modifier.width(12.dp))
+                Text(m.name, Modifier.weight(1f))
+                MutedText(if (m.complete) "Done" else "Not yet")
             }
-            if (r.incomplete.isNotEmpty()) {
-                Text(
-                    "Incomplete tests finish with normal driving (cold start, steady highway, stop-and-go) over a few days.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
+        }
+        if (r.incomplete.isNotEmpty()) {
+            MutedText("Tip: mix a cold start, 10+ minutes of steady highway driving and some stop-and-go over a few days.")
         }
     }
 }
 
-/** CLAUDE.md rule 4: explicit confirmation, engine OFF / ignition ON. */
+/** CLAUDE.md rule 4: explicit confirmation, engine OFF / ignition ON (also re-checked by the app). */
 @Composable
 private fun ClearCodesDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
     var engineOff by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Filled.Warning, null, tint = Status.Warning.color()) },
         title = { Text("Clear trouble codes?") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("This erases stored and pending codes and the freeze frame, and resets ALL readiness self-tests.")
-                Text("• The car needs several days of driving to finish the self-tests again; an emissions inspection may reject it until then.")
-                Text("• The check-engine light turns off, but comes back if the fault is still there.")
-                Text("• Clearing does not repair anything. Write the codes down first.")
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Clearing does not repair anything. It erases:")
+                Text("• Stored and pending codes, and the snapshot (freeze frame)")
+                Text("• All emission self-test results: the car needs several days of driving to redo them, and an emissions inspection may reject it until then")
+                Text("If the fault is still there, the code and the check-engine light will come back. Write the codes down first.")
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = engineOff, onCheckedChange = { engineOff = it })
-                    Text("Engine is OFF and ignition is ON")
+                    Text("The engine is OFF and the ignition is ON")
                 }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = onConfirm,
-                enabled = engineOff,
+                onClick = onConfirm, enabled = engineOff,
                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
             ) { Text("Clear codes") }
         },

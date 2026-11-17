@@ -1,4 +1,4 @@
-package com.crvdiag.app.console
+package com.crvdiag.app.connection
 
 /**
  * Turns raw socket/Bluetooth error text into a plain-language next step.

@@ -1,4 +1,4 @@
-package com.crvdiag.app.console
+package com.crvdiag.app.connection
 
 import android.app.Application
 import android.util.Log
@@ -38,10 +38,13 @@ sealed interface LinkState {
     data class Failed(val message: String) : LinkState
 }
 
+/** Plain-language stage of the startup, for the progress checklist. */
+enum class InitPhase { Adapter, Car, Network }
+
 /** Result of the automatic ELM327 startup shown in the "Car link" card. */
 sealed interface CarLinkState {
     data object Idle : CarLinkState
-    data class Initializing(val step: String) : CarLinkState
+    data class Initializing(val step: String, val phase: InitPhase) : CarLinkState
     data class Ready(val report: InitReport, val ecus: List<EcuInfo>, val protocolLocked: Boolean) : CarLinkState
     data class Failed(val step: String, val detail: String, val hint: String) : CarLinkState
 }
@@ -51,10 +54,15 @@ sealed interface CarLinkState {
  * commands go through the same [Elm327] driver. Every command passes [ConsolePolicy]; every
  * byte is recorded in [log] (mirrored to logcat tag "CrvDiag").
  */
-class ConsoleViewModel(application: Application) : AndroidViewModel(application) {
+class ConnectionViewModel(application: Application) : AndroidViewModel(application) {
 
     val log = TrafficLog(sink = { Log.d(TAG, it) })
     private val protocolStore = ProtocolStore(application)
+    private val linkPrefs = LinkPrefs(application)
+
+    private val _savedLink = MutableStateFlow(linkPrefs.get())
+    /** Last method that connected; the dashboard's Connect button reuses it. */
+    val savedLink: StateFlow<SavedLink> = _savedLink.asStateFlow()
 
     private val _state = MutableStateFlow<LinkState>(LinkState.Disconnected)
     val state: StateFlow<LinkState> = _state.asStateFlow()
@@ -94,12 +102,20 @@ class ConsoleViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun connectBluetooth(device: PairedDevice) =
-        connect("Bluetooth · ${device.name}") { BluetoothSppTransport(getApplication(), device.address) }
+        connect("Bluetooth · ${device.name}", SavedLink.Bluetooth(device.name, device.address)) {
+            BluetoothSppTransport(getApplication(), device.address)
+        }
 
     fun connectWifi(host: String, port: Int) =
-        connect("Wi-Fi · $host:$port") { WifiTcpTransport(getApplication(), host, port) }
+        connect("Wi-Fi · $host:$port", SavedLink.Wifi(host, port)) { WifiTcpTransport(getApplication(), host, port) }
 
-    private fun connect(label: String, factory: () -> Transport) {
+    /** One-tap connect with the last method that worked (Wi-Fi 192.168.0.10:35000 by default). */
+    fun connectLast() = when (val last = _savedLink.value) {
+        is SavedLink.Wifi -> connectWifi(last.host, last.port)
+        is SavedLink.Bluetooth -> connectBluetooth(PairedDevice(last.name, last.address))
+    }
+
+    private fun connect(label: String, saved: SavedLink, factory: () -> Transport) {
         if (_state.value is LinkState.Connecting || _state.value is LinkState.Connected) return
         val link = LoggingTransport(factory(), log)
         transport = link
@@ -116,6 +132,8 @@ class ConsoleViewModel(application: Application) : AndroidViewModel(application)
                 }
                 driver.start(this)
                 elm = driver
+                linkPrefs.save(saved)
+                _savedLink.value = saved
                 _state.value = LinkState.Connected(label)
                 log.add(Direction.INFO, "Connected")
 
@@ -152,7 +170,12 @@ class ConsoleViewModel(application: Application) : AndroidViewModel(application)
         log.add(Direction.INFO, "Init: start (protocol ${if (saved != null) "${saved.code} saved" else "auto"})")
 
         when (val outcome = ElmInitializer(driver).run(protocol) { step ->
-            _carLink.value = CarLinkState.Initializing(step)
+            val phase = when {
+                "(0100)" in step -> InitPhase.Car
+                "(ATDPN)" in step -> InitPhase.Network
+                else -> InitPhase.Adapter
+            }
+            _carLink.value = CarLinkState.Initializing(step, phase)
         }) {
             is InitOutcome.Success -> {
                 val report = outcome.report
@@ -208,6 +231,12 @@ class ConsoleViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun clearLog() = log.clear()
+
+    /** Screenshot tests only: show a given state without a car. */
+    internal fun showPreviewState(link: LinkState, car: CarLinkState) {
+        _state.value = link
+        _carLink.value = car
+    }
 
     /** The live driver for other screens (e.g. Trouble codes); null when not connected. */
     fun elmOrNull(): Elm327? = elm

@@ -11,8 +11,8 @@ android {
         applicationId = "com.crvdiag.app"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 4
-        versionName = "0.3.0"
+        versionCode = 5
+        versionName = "0.4.0"
     }
 
     signingConfigs {
@@ -42,7 +42,13 @@ android {
     }
 
     testOptions {
-        unitTests.all { it.useJUnitPlatform() }
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            it.useJUnitPlatform()
+            // Screenshot rendering (Robolectric) runs only on request: ./gradlew :app:testDebugUnitTest -Pscreenshots
+            it.systemProperty("screenshots", project.hasProperty("screenshots").toString())
+            it.systemProperty("screenshotDir", rootProject.layout.buildDirectory.dir("screenshots").get().asFile.path)
+        }
     }
 }
 
@@ -63,9 +69,17 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.core)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.bundles.unit.test)
     testRuntimeOnly(libs.junit.platform.launcher)
+
+    // UI screenshot rendering on the JVM (JUnit4 tests run through the vintage engine).
+    testImplementation(libs.robolectric)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testRuntimeOnly(libs.junit.vintage.engine)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

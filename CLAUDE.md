@@ -108,7 +108,12 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
 - Mode 04 is allowed ONLY by `ClearCodesPolicy`, which is `internal` to the obd module and used
   only by `CodeClearer` (checks 010C RPM = 0 from every ECU first, then ATSH7DF, then 04, no retry).
   `Elm327.execute(policy = …)` swaps the allow-list for one command; it never skips checking.
-- One shared connection (`ConsoleViewModel`, activity-scoped) is used by every screen.
+- UI (v0.4.0): landscape, navigation rail (Dashboard, Codes, Live data, Connection, Advanced),
+  clean modern dark theme with `Status` colours (ui/theme), shared components (ui/components).
+  One activity-scoped `ConnectionViewModel` + `CodesViewModel` shared by all screens; codes are read
+  automatically (read-only) when the car link becomes Ready. Raw console + log live in Advanced.
+- Screenshots (Robolectric, opt-in): `./gradlew :app:testDebugUnitTest -Pscreenshots` → `build/screenshots/`
+  at Tab A9+ landscape size (1280×800 dp). Needs host `gcp.mirrors.maven.org` (added to the environment).
 - DTC text: `HondaDtcText` (honda, only codes seen on this car, with source) then `DtcText`
   (obd, small generic SAE list); unknown codes say "not in the app's list" — never guessed.
 - Tests replay `testdata/` via `RecordedLog` (transport). `ScriptedAdapter` (elm tests) mimics the clone;
@@ -119,6 +124,8 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
 - applicationId / base package: `com.crvdiag.app`, modules `com.crvdiag.<module>`.
 
 ## Current status
+- [x] UI redesign (owner request 2026-11-17): dashboard, rail navigation, plain wording, app icon.
+  Verified by rendered screenshots; not yet seen on the tablet.
 - [x] Session 1: Android project with the 6 modules, Compose, Room, one passing test
   (verified in CI-like container: `./gradlew test assembleDebug` green; not yet installed on tablet)
 - [~] Session 2: Bluetooth + Wi-Fi transports + raw console screen

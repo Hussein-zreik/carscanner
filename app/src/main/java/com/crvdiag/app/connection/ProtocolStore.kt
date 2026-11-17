@@ -1,4 +1,4 @@
-package com.crvdiag.app.console
+package com.crvdiag.app.connection
 
 import android.content.Context
 import androidx.core.content.edit
