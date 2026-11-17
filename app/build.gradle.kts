@@ -15,6 +15,17 @@ android {
         versionName = "0.1.0"
     }
 
+    signingConfigs {
+        // Fixed debug key committed to the repo so every build (any machine, any cloud session)
+        // can update the installed app without uninstalling. Debug-only; never use for release.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
