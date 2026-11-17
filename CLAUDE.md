@@ -105,6 +105,11 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
 - Install: `./gradlew installDebug` (tablet connected, USB debugging on)
 - Tests: `./gradlew test`
 - Logcat: `adb logcat -s CrvDiag`
+- **Releases:** `.github/workflows/android-release.yml` runs tests + lint + `assembleDebug` on every
+  push (non-.md changes) and publishes `crv-diag-<version>-build<N>.apk` as a GitHub Release.
+  Owner downloads from the repo's Releases page on the tablet. Bump `versionName` for real changes.
+- Repo visibility: owner is making it private (2026-11-17) because CLAUDE.md contains the VIN and
+  car history.
 
 ## Build notes (versions as of Session 1)
 - Gradle 9.9.1 wrapper · AGP 9.5.1 · Kotlin 2.4.21 · KSP 2.3.14 · compileSdk/targetSdk 37 · JDK 17 bytecode
