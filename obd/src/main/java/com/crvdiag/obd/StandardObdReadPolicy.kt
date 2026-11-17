@@ -8,6 +8,8 @@ import com.crvdiag.elm.Verdict
  * - 01 current data (1–6 PIDs, optional trailing ELM response-count digit)
  * - 02 freeze frame (PID + frame pairs)
  * - 03 stored DTCs, 07 pending DTCs (no data bytes)
+ * - 06 on-board monitoring test results (one MID), 0A permanent DTCs (no data bytes); both are
+ *   read-only per SAE J1979, added 2026-11-17 for the scan report (owner decision: read-only forever)
  * - 09 vehicle info (one PID)
  * Mode 04 (clear DTCs) is refused here; it is only allowed from the Clear Codes flow with a
  * confirmation dialog, engine OFF / ignition ON. Every other service (incl. 22) is refused.
@@ -19,6 +21,8 @@ object StandardObdReadPolicy : CommandPolicy {
         Regex("02([0-9A-F]{4}){1,3}"),
         Regex("03"),
         Regex("07"),
+        Regex("06[0-9A-F]{2}"),
+        Regex("0A"),
         Regex("09[0-9A-F]{2}"),
     )
 

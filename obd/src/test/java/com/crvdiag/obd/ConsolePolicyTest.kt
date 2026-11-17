@@ -10,7 +10,7 @@ import org.junit.jupiter.params.provider.ValueSource
 class ConsolePolicyTest {
 
     @ParameterizedTest
-    @ValueSource(strings = ["ATZ", "at i", "0100", "01 0C", "010C0D", "010C1", "020C00", "03", "07", "0902", "ATDPN", "ATSH7E0", "AT SH 7DF"])
+    @ValueSource(strings = ["ATZ", "at i", "0100", "01 0C", "010C0D", "010C1", "020C00", "03", "07", "0902", "ATDPN", "ATSH7E0", "AT SH 7DF", "06A2", "0600", "0A"])
     fun `standard reads and adapter commands are allowed`(raw: String) {
         assertEquals(Verdict.Allowed, ConsolePolicy.check(CommandPolicy.normalize(raw)))
     }
@@ -19,7 +19,8 @@ class ConsolePolicyTest {
     @ValueSource(
         strings = [
             "04", // clear DTCs: only via confirmation flow
-            "0A", // permanent DTCs: not on list yet
+            "06", // mode 06 needs a MID
+            "0AFF", // mode 0A takes no data bytes
             "22F190", // Honda/UDS read by ID: TODO(capture), not allowed yet
             "2E0101", // UDS write data by ID
             "3101FF00", // routine control

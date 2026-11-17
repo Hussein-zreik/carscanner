@@ -1,8 +1,5 @@
 package com.crvdiag.app.recording
 
-import android.content.ActivityNotFoundException
-import android.content.Context
-import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,8 +30,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
 import com.crvdiag.app.ui.components.MutedText
+import com.crvdiag.app.ui.shareFile
+import com.crvdiag.data.ScanReportEntity
 import com.crvdiag.app.ui.components.ScreenHeader
 import com.crvdiag.app.ui.components.SectionCard
 import com.crvdiag.app.ui.components.StatusPill
@@ -50,6 +48,8 @@ private val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM yyy
 @Composable
 fun LogsScreen(vm: LogsViewModel) {
     val logs by vm.logs.collectAsState()
+    val reports by vm.reports.collectAsState()
+    var reportToDelete by remember { mutableStateOf<ScanReportEntity?>(null) }
     val context = LocalContext.current
     var toDelete by remember { mutableStateOf<DriveLogEntity?>(null) }
     LaunchedEffect(Unit) { vm.observe() }
@@ -58,7 +58,23 @@ fun LogsScreen(vm: LogsViewModel) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(28.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        ScreenHeader("Drive logs", "Recorded drives. Files stay on this tablet until you share them.")
+        ScreenHeader("Logs & reports", "Scan reports and recorded drives. Files stay on this tablet until you share them.")
+        SectionCard("Scan reports", Modifier.fillMaxWidth(), icon = Icons.AutoMirrored.Filled.List) {
+            if (reports.isEmpty()) MutedText("No reports yet. Create one from Codes → Create report.")
+            reports.forEach { r ->
+                val pdf = File(vm.reportsDir, r.fileName)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("${r.type} · " + DATE.format(Instant.ofEpochMilli(r.createdAtEpochMs).atZone(ZoneId.systemDefault())),
+                            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        MutedText(r.summary)
+                    }
+                    Button(onClick = { shareFile(context, pdf, "application/pdf") }, enabled = pdf.exists()) { Text("Share PDF") }
+                    TextButton(onClick = { reportToDelete = r }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Delete") }
+                }
+            }
+        }
+        Text("Drive logs", style = MaterialTheme.typography.titleLarge)
         if (logs.isEmpty()) {
             SectionCard("No drives recorded yet", icon = Icons.Filled.Info) {
                 MutedText("Open Live data and tap Record drive. Recording keeps going with the screen off; the live view hides while the car moves.")
@@ -83,8 +99,8 @@ fun LogsScreen(vm: LogsViewModel) {
                     if (log.endedAtEpochMs == null) StatusPill("Recording", Status.Fault)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = { share(context, csv, "text/csv") }, enabled = csv.exists()) { Text("Share CSV") }
-                    OutlinedButton(onClick = { share(context, raw, "text/plain") }, enabled = raw.exists()) { Text("Share adapter log") }
+                    Button(onClick = { shareFile(context, csv, "text/csv") }, enabled = csv.exists()) { Text("Share CSV") }
+                    OutlinedButton(onClick = { shareFile(context, raw, "text/plain") }, enabled = raw.exists()) { Text("Share adapter log") }
                     TextButton(
                         onClick = { toDelete = log }, enabled = log.endedAtEpochMs != null,
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
@@ -100,6 +116,15 @@ fun LogsScreen(vm: LogsViewModel) {
         }
     }
 
+    reportToDelete?.let { r ->
+        AlertDialog(
+            onDismissRequest = { reportToDelete = null },
+            title = { Text("Delete this report?") },
+            text = { Text("The PDF is removed from the tablet. This can't be undone.") },
+            confirmButton = { TextButton(onClick = { vm.deleteReport(r); reportToDelete = null }) { Text("Delete") } },
+            dismissButton = { TextButton(onClick = { reportToDelete = null }) { Text("Cancel") } },
+        )
+    }
     toDelete?.let { log ->
         AlertDialog(
             onDismissRequest = { toDelete = null },
@@ -118,16 +143,3 @@ private fun duration(ms: Long): String {
     return if (s >= 3600) "%dh %02dm".format(s / 3600, s % 3600 / 60) else "%dm %02ds".format(s / 60, s % 60)
 }
 
-/** User-initiated share through Android's share menu; the app itself never uploads anything. */
-private fun share(context: Context, file: File, mime: String) {
-    val uri = FileProvider.getUriForFile(context, context.packageName + ".files", file)
-    val send = Intent(Intent.ACTION_SEND).setType(mime)
-        .putExtra(Intent.EXTRA_STREAM, uri)
-        .putExtra(Intent.EXTRA_SUBJECT, file.name)
-        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    try {
-        context.startActivity(Intent.createChooser(send, "Share ${file.name}"))
-    } catch (_: ActivityNotFoundException) {
-        // No app can receive files: nothing to do.
-    }
-}

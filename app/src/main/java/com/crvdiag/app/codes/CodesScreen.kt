@@ -20,6 +20,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -34,12 +36,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.crvdiag.app.connection.CarLinkState
 import com.crvdiag.app.connection.ConnectionViewModel
+import com.crvdiag.app.report.ReportPreview
+import com.crvdiag.app.report.ReportType
 import com.crvdiag.app.ui.EcuNames
+import com.crvdiag.app.ui.shareFile
+import com.crvdiag.data.OdometerEstimate
 import com.crvdiag.app.ui.components.BigValue
 import com.crvdiag.app.ui.components.MutedText
 import com.crvdiag.app.ui.components.ScreenHeader
@@ -57,11 +64,19 @@ fun mainReadiness(report: DiagnosticsReport): Readiness? =
     report.readiness.values.maxByOrNull { r -> r.monitors.count { it.available } }
 
 @Composable
-fun CodesScreen(connection: ConnectionViewModel, codes: CodesViewModel, onOpenConnection: () -> Unit) {
+fun CodesScreen(
+    connection: ConnectionViewModel,
+    codes: CodesViewModel,
+    odometer: OdometerEstimate?,
+    onOpenConnection: () -> Unit,
+) {
     val state by codes.state.collectAsState()
+    val report by codes.report.collectAsState()
+    val context = LocalContext.current
+    var showReportDialog by remember { mutableStateOf(false) }
     val carLink by connection.carLink.collectAsState()
     val ready = carLink as? CarLinkState.Ready
-    val busy = state is CodesState.Busy
+    val busy = state is CodesState.Busy || report is ReportState.Building
     var showClearDialog by remember { mutableStateOf(false) }
 
     Column(
@@ -69,6 +84,7 @@ fun CodesScreen(connection: ConnectionViewModel, codes: CodesViewModel, onOpenCo
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         ScreenHeader("Trouble codes", "What the car's computers have noticed. Reading never changes anything.") {
+            OutlinedButton(onClick = { showReportDialog = true }, enabled = ready != null && !busy) { Text("Create report…") }
             Button(onClick = { codes.read(connection.elmOrNull(), carLink, connection.log) }, enabled = ready != null && !busy) {
                 Icon(Icons.Filled.Refresh, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
@@ -88,6 +104,25 @@ fun CodesScreen(connection: ConnectionViewModel, codes: CodesViewModel, onOpenCo
             }
         }
 
+        when (val r = report) {
+            ReportState.Idle -> Unit
+            is ReportState.Building -> SectionCard("Creating report", Modifier.fillMaxWidth(), icon = Icons.Filled.Info) {
+                MutedText("Reading every scanned system (read-only)… ${r.step}")
+            }
+            is ReportState.Error -> SectionCard("Report not created", Modifier.fillMaxWidth(), icon = Icons.Filled.Warning, iconTint = Status.Fault.color()) {
+                Text(r.message, color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = codes::dismissReport) { Text("Dismiss") }
+            }
+            is ReportState.Done -> SectionCard("${r.type.label} saved", Modifier.fillMaxWidth(), icon = Icons.Filled.CheckCircle, iconTint = Status.Ok.color()) {
+                MutedText("Saved as ${r.file.name}. Find it any time under Logs & reports.")
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = { shareFile(context, r.file, "application/pdf") }) { Text("Share PDF") }
+                    TextButton(onClick = codes::dismissReport) { Text("Close") }
+                }
+                ReportPreview(r.blocks, Modifier.fillMaxWidth())
+            }
+        }
+
         when (val s = state) {
             CodesState.Idle -> if (ready != null) MutedText("Tap Read codes.")
             is CodesState.Busy -> MutedText("Reading… ${s.step}")
@@ -97,6 +132,16 @@ fun CodesScreen(connection: ConnectionViewModel, codes: CodesViewModel, onOpenCo
                 ReportView(s.report, ready?.ecus.orEmpty())
             }
         }
+    }
+
+    if (showReportDialog) {
+        ReportDialog(
+            onCreate = { type, notes ->
+                showReportDialog = false
+                codes.createReport(connection.elmOrNull(), carLink, connection.log, type, notes, odometer)
+            },
+            onDismiss = { showReportDialog = false },
+        )
     }
 
     if (showClearDialog) {
@@ -215,6 +260,35 @@ private fun SelfTests(r: Readiness) {
             MutedText("Tip: mix a cold start, 10+ minutes of steady highway driving and some stop-and-go over a few days.")
         }
     }
+}
+
+@Composable
+private fun ReportDialog(onCreate: (ReportType, String?) -> Unit, onDismiss: () -> Unit) {
+    var type by remember { mutableStateOf(ReportType.HealthCheck) }
+    var notes by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Filled.Info, null) },
+        title = { Text("Create a scan report") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Reads every system this adapter can reach (read-only) and saves a dated PDF.")
+                ReportType.entries.forEach { t ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = type == t, onClick = { type = t })
+                        Column {
+                            Text(t.label)
+                            MutedText(t.purpose)
+                        }
+                    }
+                }
+                OutlinedTextField(notes, { notes = it }, label = { Text("Notes (optional): shop, repair done…") }, modifier = Modifier.fillMaxWidth())
+                MutedText("Airbag, ABS and tire-pressure systems will be listed as NOT SCANNED with this adapter.")
+            }
+        },
+        confirmButton = { TextButton(onClick = { onCreate(type, notes.ifBlank { null }) }) { Text("Create report") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 /** CLAUDE.md rule 4: explicit confirmation, engine OFF / ignition ON (also re-checked by the app). */

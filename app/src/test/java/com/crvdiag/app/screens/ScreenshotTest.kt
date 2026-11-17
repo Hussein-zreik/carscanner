@@ -10,6 +10,14 @@ import androidx.test.core.app.ApplicationProvider
 import com.crvdiag.app.codes.CodesScreen
 import com.crvdiag.app.codes.CodesState
 import com.crvdiag.app.codes.CodesViewModel
+import com.crvdiag.app.codes.ReportState
+import com.crvdiag.app.report.PdfReportWriter
+import com.crvdiag.app.report.ReportFormatter
+import com.crvdiag.app.report.ReportInput
+import com.crvdiag.app.report.ReportType
+import com.crvdiag.obd.MisfireCount
+import com.crvdiag.obd.ScanData
+import java.time.ZonedDateTime
 import com.crvdiag.app.connection.CarLinkState
 import com.crvdiag.app.connection.ConnectionScreen
 import com.crvdiag.app.connection.ConnectionViewModel
@@ -90,7 +98,7 @@ class ScreenshotTest {
         assumeTrue("Run with -Pscreenshots", System.getProperty("screenshots") == "true")
         val app = ApplicationProvider.getApplicationContext<Application>()
         connection = ConnectionViewModel(app)
-        codes = CodesViewModel()
+        codes = CodesViewModel(app)
         service = MaintenanceViewModel(app)
         // SYNTHETIC example history: some items known, some not (owner's situation).
         val today = LocalDate.of(2026, 11, 17)
@@ -139,7 +147,7 @@ class ScreenshotTest {
 
     @Test fun codes() {
         connected()
-        shoot("3-codes", Destination.Codes) { CodesScreen(connection, codes) {} }
+        shoot("3-codes", Destination.Codes) { CodesScreen(connection, codes, null) {} }
     }
 
     @Test fun connectionConnecting() {
@@ -188,6 +196,33 @@ class ScreenshotTest {
             DriveLogEntity(1, day, day + 1_320_000, "drive_a.csv", "drive_a.log", 8_255),
         ))
         shoot("9-logs", Destination.Logs) { LogsScreen(vm) }
+    }
+
+    private fun reportInput() = ReportInput(
+        type = ReportType.PreRepair, notes = "Before EVAP purge valve check at the shop.",
+        createdAt = ZonedDateTime.now(), appVersion = "0.8.0", adapterId = "ELM327 v1.5",
+        protocolLabel = ElmProtocol.CAN_11_500.label, voltage = "12.1V", odometerMiles = 153_704, odometerEstimated = true,
+        ecus = ready.ecus,
+        data = ScanData(diagnostics, permanent = mapOf("7E8" to emptyList()), vin = "5J6RE4H50BL017022",
+            calibrationIds = mapOf("7E8" to listOf("37805-RZA-A630")), ecuNames = mapOf("7E8" to "ECM-EngineControl"),
+            misfires = (1..4).map { MisfireCount(it, 0, 0) }),
+        describeCode = { com.crvdiag.honda.HondaDtcText.describe(it) ?: com.crvdiag.obd.DtcText.describe(it) },
+    )
+
+    @Test fun report() {
+        connected()
+        val input = reportInput()
+        val blocks = ReportFormatter.build(input)
+        codes.showPreviewState(CodesState.Done(diagnostics), ReportState.Done(ReportType.PreRepair, blocks, File("report_PreRepair.pdf")))
+        shoot("11-report", Destination.Codes) { CodesScreen(connection, codes, null) {} }
+        // Also try the real PDF. Robolectric has no native PdfDocument ("document is closed"),
+        // so on the JVM this is skipped; the PDF is verified on the tablet.
+        val dir = File(System.getProperty("screenshotDir")!!)
+        try {
+            PdfReportWriter.write(blocks, "CR-V Diag · Pre-repair scan · VIN 5J6RE4H50BL017022", File(dir, "report.pdf"))
+        } catch (e: IllegalStateException) {
+            println("PDF not rendered under Robolectric: ${e.message}")
+        }
     }
 
     @Test fun maintenance() {

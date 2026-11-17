@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.crvdiag.data.CrvDatabase
 import com.crvdiag.data.DriveLogEntity
+import com.crvdiag.data.ScanReportEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,7 +16,12 @@ import java.io.File
 
 class LogsViewModel(application: Application) : AndroidViewModel(application) {
     val dir = File(application.filesDir, "logs")
+    val reportsDir = File(application.filesDir, "reports")
     private val dao by lazy { CrvDatabase.get(application).driveLogDao() }
+    private val reportDao by lazy { CrvDatabase.get(application).scanReportDao() }
+
+    private val _reports = MutableStateFlow<List<ScanReportEntity>>(emptyList())
+    val reports: StateFlow<List<ScanReportEntity>> = _reports.asStateFlow()
 
     private val _logs = MutableStateFlow<List<DriveLogEntity>>(emptyList())
     val logs: StateFlow<List<DriveLogEntity>> = _logs.asStateFlow()
@@ -26,6 +32,7 @@ class LogsViewModel(application: Application) : AndroidViewModel(application) {
         if (observing) return
         observing = true
         viewModelScope.launch { dao.observeAll().collect { _logs.value = it } }
+        viewModelScope.launch { reportDao.observeAll().collect { _reports.value = it } }
     }
 
     fun delete(log: DriveLogEntity) = viewModelScope.launch {
@@ -33,6 +40,13 @@ class LogsViewModel(application: Application) : AndroidViewModel(application) {
             File(dir, log.csvFile).delete()
             File(dir, log.rawFile).delete()
             dao.delete(log.id)
+        }
+    }
+
+    fun deleteReport(r: ScanReportEntity) = viewModelScope.launch {
+        withContext(Dispatchers.IO) {
+            File(reportsDir, r.fileName).delete()
+            reportDao.delete(r.id)
         }
     }
 

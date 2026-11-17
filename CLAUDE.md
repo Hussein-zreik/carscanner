@@ -113,7 +113,8 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
 - All 6 modules are Android modules; unit tests run on the JVM with JUnit5 via
   `testOptions.unitTests.all { it.useJUnitPlatform() }` (no extra plugin).
 - All adapter traffic goes through `Elm327` (elm) → `GuardedSender` + `ConsolePolicy` (obd):
-  adapter-only AT commands, `ATSH7DF`/`ATSH7E0-7`, modes 01/02/03/07/09. Refused: other ATSH,
+  adapter-only AT commands, `ATSH7DF`/`ATSH7E0-7`, modes 01/02/03/07/09, plus 06 (one MID) and 0A
+  (read-only per SAE J1979; added 2026-11-17 for the scan report). Refused: other ATSH,
   ATCRA/ATPP/ATSD/ATMA/ATFI/ATBI, mode 04, 22, all others. `Elm327` owns the single responses collector.
 - Startup: `ElmInitializer` (ATZ, ATE0, ATL0, ATS0, ATH1, ATSP, ATRV, 0100, ATDPN). First run uses
   ATSP0; a detected CAN protocol is saved (`ProtocolStore`) and later runs use ATSP<n> (no K-line probing).
@@ -171,6 +172,12 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
   "whichever comes first" intervals (defaults = starting points, NOT Honda's official schedule);
   odometer from owner readings with daily-average estimate; backwards-reading protection; Room v3
   (auto-migration 2→3). Code done, tests green; awaiting use on the tablet.
+- [~] Pro Step A: scan report (Codes → Create report): Pre-repair / Post-repair / Health check;
+  VIN via 0902 (check digit + match with `CarProfile.VIN`), CAL IDs 0904, module name 090A, permanent
+  codes 0A, misfire counters (06 A2–A5), readiness, freeze frame; SRS/VSA/TPMS always "NOT SCANNED"
+  until Step B. PDF (android PdfDocument, A4) in filesDir/reports, Room `scan_reports` (DB v4),
+  listed under Logs & reports with Share/Delete. Tests green; on-screen preview rendered.
+  **PDF output not verifiable under Robolectric (no native PdfDocument): verify on the tablet.**
 - Phase 1 status: all six sessions coded; Phase 1 is DONE only after a stable 20-min recorded drive.
 
 ## Notes

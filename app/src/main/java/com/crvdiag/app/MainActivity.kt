@@ -73,7 +73,10 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                         )
-                        Destination.Codes -> CodesScreen(connection, codes, onOpenConnection = { current = Destination.Connection })
+                        Destination.Codes -> {
+                            val service by maintenance.state.collectAsState()
+                            CodesScreen(connection, codes, service.odometer, onOpenConnection = { current = Destination.Connection })
+                        }
                         Destination.Live -> LiveDataScreen(connection, live)
                         Destination.Logs -> LogsScreen(logs)
                         Destination.Maintenance -> MaintenanceScreen(maintenance)
