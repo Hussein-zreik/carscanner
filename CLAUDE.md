@@ -27,7 +27,7 @@ Built in phases; read this file at the start of every session.
     probes the K-line (pin 7: SRS/VSA/immobilizer) during startup.
   - **Approved by owner 2026-11-17:** `ATSH7DF` and `ATSH7E0`–`ATSH7E7` only (standard OBD IDs) so
     requests can target one ECU; every other ATSH value stays refused.
-- Adapter for Phase 3: OBDLink MX+ (STN chip, ELM327-compatible + extended ST commands).
+- Adapter for Phase 3: OBDLink MX+ (STN chip, ELM327-compatible + extended ST commands). Not owned yet (2026-11-17).
 
 ## SAFETY RULES (non-negotiable)
 1. **Read first, clear second, never write.** No coding, no configuration writes, no reflashing.
@@ -178,6 +178,15 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
   until Step B. PDF (android PdfDocument, A4) in filesDir/reports, Room `scan_reports` (DB v4),
   listed under Logs & reports with Share/Delete. Tests green; on-screen preview rendered.
   **PDF output not verifiable under Robolectric (no native PdfDocument): verify on the tablet.**
+- [ ] Pro Step B (SRS / VSA / TPMS codes) — **blocked, by design** (2026-11-17):
+  - Honda's K-line protocol for these modules is not publicly documented (research found only
+    engine-ECU K-line work). OBDLink's own app reads them on 2007–2019 CR-V via its paid Honda
+    "enhanced diagnostics" add-on.
+  - Plan (owner-approved): owner buys OBDLink MX+ and reads SRS/ABS/TPMS codes with the OBDLink app
+    now (safety first); LATER a capture session (OBD Y-splitter + passive K-line sniffer while the
+    OBDLink app reads codes) gives the exact request bytes. Only those captured, read-codes (and,
+    behind confirmation, clear-codes) messages may ever enter the honda allow-lists.
+  - Never build SRS/VSA/TPMS requests from guesses, forums or other Honda models.
 - Phase 1 status: all six sessions coded; Phase 1 is DONE only after a stable 20-min recorded drive.
 
 ## Notes
