@@ -76,6 +76,8 @@ fun ConsoleScreen(onBack: () -> Unit, vm: ConsoleViewModel = viewModel()) {
     val entries by vm.log.entries.collectAsState()
     val paired by vm.paired.collectAsState()
     val bluetoothOff by vm.bluetoothOff.collectAsState()
+    val carLink by vm.carLink.collectAsState()
+    val savedProtocol by vm.savedProtocol.collectAsState()
     val context = LocalContext.current
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
@@ -206,6 +208,12 @@ fun ConsoleScreen(onBack: () -> Unit, vm: ConsoleViewModel = viewModel()) {
                 }
             }
 
+            CarLinkCard(
+                carLink = carLink,
+                savedProtocol = savedProtocol?.let { "${it.code} · ${it.label}" },
+                onForgetProtocol = vm::forgetProtocol,
+            )
+
             TrafficView(entries = entries, format = vm.log::format, modifier = Modifier.weight(1f).fillMaxWidth())
 
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -294,6 +302,50 @@ private fun TrafficView(
                         TrafficLog.Direction.INFO -> MaterialTheme.colorScheme.tertiary
                     },
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CarLinkCard(carLink: CarLinkState, savedProtocol: String?, onForgetProtocol: () -> Unit) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Car link", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                if (savedProtocol != null) {
+                    TextButton(onClick = onForgetProtocol) { Text("Re-detect protocol") }
+                }
+            }
+            when (carLink) {
+                CarLinkState.Idle -> Text(
+                    if (savedProtocol != null) "Saved protocol: $savedProtocol (no auto-search)"
+                    else "Protocol will be auto-detected on first connect",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                is CarLinkState.Initializing -> Text("Starting… ${carLink.step}", style = MaterialTheme.typography.bodyMedium)
+                is CarLinkState.Failed -> {
+                    Text("Startup failed at ${carLink.step}: ${carLink.detail}", color = MaterialTheme.colorScheme.error)
+                    Text(carLink.hint, style = MaterialTheme.typography.bodyMedium)
+                }
+                is CarLinkState.Ready -> {
+                    val r = carLink.report
+                    val protocol = r.detected?.let {
+                        "${it.protocol.code} · ${it.protocol.label} " + if (it.automatic) "(auto-detected)" else "(saved)"
+                    } ?: "unknown"
+                    Text("Adapter: ${r.adapterId ?: "?"}  ·  Voltage: ${r.voltage ?: "?"}")
+                    Text("Protocol: $protocol")
+                    carLink.ecus.forEachIndexed { i, ecu ->
+                        val address = ecu.responseId?.let { "$it (request ${ecu.requestId ?: "?"})" } ?: "ECU ${i + 1} (address unknown)"
+                        Text(
+                            "$address · ${ecu.supportedPids.size} PIDs: " +
+                                ecu.supportedPids.joinToString(" ") { "%02X".format(it) },
+                            fontFamily = FontFamily.Monospace,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    r.warnings.forEach { Text("⚠ $it", color = MaterialTheme.colorScheme.tertiary) }
+                }
             }
         }
     }

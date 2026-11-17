@@ -25,8 +25,8 @@ Built in phases; read this file at the start of every session.
     No PID 14 (upstream narrowband O2) → upstream is probably a wideband A/F sensor; confirm via `0120`.
   - Plan: once protocol 6 is confirmed, pin `ATSP6` instead of auto-search so the adapter never
     probes the K-line (pin 7: SRS/VSA/immobilizer) during startup.
-  - Decision pending (user): allow `ATSH7DF` and `ATSH7E0`–`ATSH7E7` only (standard OBD IDs) so
-    requests can target the engine ECU; all other ATSH values stay refused.
+  - **Approved by owner 2026-11-17:** `ATSH7DF` and `ATSH7E0`–`ATSH7E7` only (standard OBD IDs) so
+    requests can target one ECU; every other ATSH value stays refused.
 - Adapter for Phase 3: OBDLink MX+ (STN chip, ELM327-compatible + extended ST commands).
 
 ## SAFETY RULES (non-negotiable)
@@ -99,8 +99,14 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
   (it is declared `apply false` in the root only to pin the Kotlin version).
 - All 6 modules are Android modules; unit tests run on the JVM with JUnit5 via
   `testOptions.unitTests.all { it.useJUnitPlatform() }` (no extra plugin).
-- Raw console sends only via `GuardedSender` + `ConsolePolicy` (obd module): adapter-only AT
-  commands + modes 01/02/03/07/09. Refused: ATSH/ATCRA/ATPP/ATSD/ATMA/ATFI/ATBI, mode 04, 22, all others.
+- All adapter traffic goes through `Elm327` (elm) → `GuardedSender` + `ConsolePolicy` (obd):
+  adapter-only AT commands, `ATSH7DF`/`ATSH7E0-7`, modes 01/02/03/07/09. Refused: other ATSH,
+  ATCRA/ATPP/ATSD/ATMA/ATFI/ATBI, mode 04, 22, all others. `Elm327` owns the single responses collector.
+- Startup: `ElmInitializer` (ATZ, ATE0, ATL0, ATS0, ATH1, ATSP, ATRV, 0100, ATDPN). First run uses
+  ATSP0; a detected CAN protocol is saved (`ProtocolStore`) and later runs use ATSP<n> (no K-line probing).
+  "Re-detect protocol" in the console clears it.
+- Tests replay `testdata/` via `RecordedLog` (transport). `ScriptedAdapter` (elm tests) mimics the clone;
+  its CAN headers are SYNTHETIC until an ATH1 recording exists (marked TODO(capture)).
 - Traffic log export format (future `testdata/` format): `HH:mm:ss.SSS TX|RX|INFO <text>` with `\r` escaped.
 - Library modules declare their own install-time permissions (lint checks them per module).
 - Room schemas are exported to `data/schemas/` and committed (needed for migrations).
@@ -115,7 +121,8 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
     (single-client limit or pairing likely; iPhone Car Scanner uses the adapter over Wi-Fi, so no
     evidence of BLE-only). Resume when user re-scans; do not
     build a BLE transport without confirmation. Wi-Fi is the working link for now.
-- [ ] Session 3: ELM327 init + protocol detection logged
+- [~] Session 3: ELM327 init + protocol detection + ECU discovery (code done, 100 unit tests green
+  incl. replay of the real recording; **awaiting car test**: auto-start on Connect, protocol, ECU IDs)
 - [ ] Session 4: Mode 01 live data (10 PIDs) + gauge screen
 - [ ] Session 5: DTCs (03/07), clear (04) with confirmation, freeze frame (02)
 - [ ] Session 6: CSV logging + FakeTransport replay

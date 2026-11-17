@@ -10,7 +10,7 @@ import org.junit.jupiter.params.provider.ValueSource
 class ConsolePolicyTest {
 
     @ParameterizedTest
-    @ValueSource(strings = ["ATZ", "at i", "0100", "01 0C", "010C0D", "010C1", "020C00", "03", "07", "0902", "ATDPN"])
+    @ValueSource(strings = ["ATZ", "at i", "0100", "01 0C", "010C0D", "010C1", "020C00", "03", "07", "0902", "ATDPN", "ATSH7E0", "AT SH 7DF"])
     fun `standard reads and adapter commands are allowed`(raw: String) {
         assertEquals(Verdict.Allowed, ConsolePolicy.check(CommandPolicy.normalize(raw)))
     }
@@ -26,7 +26,8 @@ class ConsolePolicyTest {
             "1003", // diagnostic session control
             "2701", // security access
             "1101", // ECU reset
-            "ATSH7E0", // header change
+            "ATSH7C0", // non-standard header
+            "ATSH18DAF110", // 29-bit header
             "03FF", // mode 03 takes no data bytes
             "01", // missing PID
             "HELLO",

@@ -35,8 +35,10 @@ class CompositePolicy(private vararg val policies: CommandPolicy) : CommandPolic
 }
 
 /**
- * AT commands that only change the adapter's own behaviour or read its status.
- * Blocked on purpose: ATSH/ATCRA (address other modules), ATPP/ATSD (adapter EEPROM writes),
+ * AT commands that only change the adapter's own behaviour or read its status, plus ATSH
+ * limited to the standard OBD-II CAN request IDs (approved by the owner 2026-11-17):
+ * 7DF = functional broadcast, 7E0–7E7 = physical requests to ECU #1–#8.
+ * Blocked on purpose: any other ATSH value, ATCRA, ATPP/ATSD (adapter EEPROM writes),
  * ATMA/ATFI/ATBI etc. (bus monitoring/init; added later when a session needs them).
  */
 object AdapterCommandPolicy : CommandPolicy {
@@ -49,6 +51,7 @@ object AdapterCommandPolicy : CommandPolicy {
         Regex("ATSP[0-9A-C]"), // set protocol (0 = auto)
         Regex("ATTP[0-9A-C]"), // try protocol
         Regex("ATST[0-9A-F]{2}"), // response timeout
+        Regex("ATSH7(DF|E[0-7])"), // standard OBD-II request IDs only
     )
 
     override fun check(command: String): Verdict = when {

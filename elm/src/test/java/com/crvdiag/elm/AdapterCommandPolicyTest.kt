@@ -9,13 +9,13 @@ import org.junit.jupiter.params.provider.ValueSource
 class AdapterCommandPolicyTest {
 
     @ParameterizedTest
-    @ValueSource(strings = ["ATZ", "ATI", "ATE0", "ATL0", "ATS0", "ATH1", "ATSP0", "ATSP6", "ATDPN", "ATRV", "ATST32", "ATAT1"])
+    @ValueSource(strings = ["ATZ", "ATI", "ATE0", "ATL0", "ATS0", "ATH1", "ATSP0", "ATSP6", "ATDPN", "ATRV", "ATST32", "ATAT1", "ATSH7DF", "ATSH7E0", "ATSH7E7"])
     fun `adapter-only commands are allowed`(cmd: String) {
         assertEquals(Verdict.Allowed, AdapterCommandPolicy.check(cmd))
     }
 
     @ParameterizedTest
-    @ValueSource(strings = ["ATSH7E0", "ATPP0CSV0A", "ATPPFFON", "ATSD01", "ATMA", "ATFI", "ATBI", "ATCRA7E8", "ATSPD", "ATXYZ"])
+    @ValueSource(strings = ["ATSH7E8", "ATSH7C0", "ATSH7B0", "ATSH18DAF110", "ATSH000", "ATSH7E", "ATPP0CSV0A", "ATPPFFON", "ATSD01", "ATMA", "ATFI", "ATBI", "ATCRA7E8", "ATSPD", "ATXYZ"])
     fun `risky or unknown AT commands are refused`(cmd: String) {
         assertTrue(AdapterCommandPolicy.check(cmd) is Verdict.Refused)
     }

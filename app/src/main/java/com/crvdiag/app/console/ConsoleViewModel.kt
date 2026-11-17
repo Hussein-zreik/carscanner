@@ -4,8 +4,15 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.crvdiag.elm.GuardedSender
+import com.crvdiag.elm.Elm327
+import com.crvdiag.elm.ElmInitializer
+import com.crvdiag.elm.ElmProtocol
+import com.crvdiag.elm.ElmResult
+import com.crvdiag.elm.InitOutcome
+import com.crvdiag.elm.InitReport
 import com.crvdiag.obd.ConsolePolicy
+import com.crvdiag.obd.EcuDiscovery
+import com.crvdiag.obd.EcuInfo
 import com.crvdiag.transport.BluetoothDevices
 import com.crvdiag.transport.BluetoothOffException
 import com.crvdiag.transport.BluetoothSppTransport
@@ -31,16 +38,32 @@ sealed interface LinkState {
     data class Failed(val message: String) : LinkState
 }
 
+/** Result of the automatic ELM327 startup shown in the "Car link" card. */
+sealed interface CarLinkState {
+    data object Idle : CarLinkState
+    data class Initializing(val step: String) : CarLinkState
+    data class Ready(val report: InitReport, val ecus: List<EcuInfo>, val protocolLocked: Boolean) : CarLinkState
+    data class Failed(val step: String, val detail: String, val hint: String) : CarLinkState
+}
+
 /**
- * Raw adapter console. Every command goes through [GuardedSender] + [ConsolePolicy];
- * every byte in and out is recorded in [log] (also mirrored to logcat tag "CrvDiag").
+ * Adapter console. On connect it runs the ELM327 startup ([ElmInitializer]); afterwards raw
+ * commands go through the same [Elm327] driver. Every command passes [ConsolePolicy]; every
+ * byte is recorded in [log] (mirrored to logcat tag "CrvDiag").
  */
 class ConsoleViewModel(application: Application) : AndroidViewModel(application) {
 
     val log = TrafficLog(sink = { Log.d(TAG, it) })
+    private val protocolStore = ProtocolStore(application)
 
     private val _state = MutableStateFlow<LinkState>(LinkState.Disconnected)
     val state: StateFlow<LinkState> = _state.asStateFlow()
+
+    private val _carLink = MutableStateFlow<CarLinkState>(CarLinkState.Idle)
+    val carLink: StateFlow<CarLinkState> = _carLink.asStateFlow()
+
+    private val _savedProtocol = MutableStateFlow(protocolStore.get())
+    val savedProtocol: StateFlow<ElmProtocol?> = _savedProtocol.asStateFlow()
 
     private val _paired = MutableStateFlow<List<PairedDevice>>(emptyList())
     val paired: StateFlow<List<PairedDevice>> = _paired.asStateFlow()
@@ -50,7 +73,7 @@ class ConsoleViewModel(application: Application) : AndroidViewModel(application)
     val bluetoothOff: StateFlow<Boolean> = _bluetoothOff.asStateFlow()
 
     @Volatile private var transport: Transport? = null
-    @Volatile private var sender: GuardedSender? = null
+    @Volatile private var elm: Elm327? = null
     @Volatile private var userClosed = false
 
     fun refreshPairedDevices() {
@@ -82,17 +105,23 @@ class ConsoleViewModel(application: Application) : AndroidViewModel(application)
         transport = link
         userClosed = false
         _state.value = LinkState.Connecting(label)
+        _carLink.value = CarLinkState.Idle
         log.add(Direction.INFO, "Connecting: $label")
 
         viewModelScope.launch {
             try {
                 link.connect()
-                sender = GuardedSender(link, ConsolePolicy) { cmd, reason ->
+                val driver = Elm327(link, ConsolePolicy) { cmd, reason ->
                     log.add(Direction.INFO, "REFUSED $cmd: $reason")
                 }
+                driver.start(this)
+                elm = driver
                 _state.value = LinkState.Connected(label)
                 log.add(Direction.INFO, "Connected")
-                link.responses.collect { /* logged by LoggingTransport */ }
+
+                initialize(driver)
+
+                driver.closed.await()?.let { throw it }
                 log.add(Direction.INFO, "Link closed")
                 _state.value = LinkState.Disconnected
             } catch (e: CancellationException) {
@@ -109,11 +138,56 @@ class ConsoleViewModel(application: Application) : AndroidViewModel(application)
                     _state.value = LinkState.Failed(hint ?: msg)
                 }
             } finally {
-                sender = null
+                elm = null
                 transport = null
                 withContext(NonCancellable) { link.close() }
             }
         }
+    }
+
+    /** Runs the CLAUDE.md startup sequence and fills the "Car link" card. */
+    private suspend fun initialize(driver: Elm327) {
+        val saved = protocolStore.get()
+        val protocol = saved ?: ElmProtocol.AUTO
+        log.add(Direction.INFO, "Init: start (protocol ${if (saved != null) "${saved.code} saved" else "auto"})")
+
+        when (val outcome = ElmInitializer(driver).run(protocol) { step ->
+            _carLink.value = CarLinkState.Initializing(step)
+        }) {
+            is InitOutcome.Success -> {
+                val report = outcome.report
+                val detected = report.detected?.protocol
+                val ecus = EcuDiscovery.fromPid00(report.pid00Lines, if (report.headersOn) detected else null)
+                report.warnings.forEach { log.add(Direction.INFO, "Init warning: $it") }
+                log.add(Direction.INFO, "Init: ${report.adapterId}, ${report.voltage}, protocol ${detected?.code} ${detected?.label}")
+                ecus.forEach { ecu ->
+                    log.add(
+                        Direction.INFO,
+                        "ECU ${ecu.responseId ?: "?"} (request ${ecu.requestId ?: "?"}): PIDs ${ecu.supportedPids.joinToString(",") { "%02X".format(it) }}",
+                    )
+                }
+                // Pin the confirmed CAN protocol so future connections skip auto-search.
+                if (detected != null && detected.isCan && saved == null) {
+                    protocolStore.save(detected)
+                    _savedProtocol.value = detected
+                    log.add(Direction.INFO, "Init: protocol ${detected.code} saved; next connect uses ATSP${detected.code}")
+                }
+                _carLink.value = CarLinkState.Ready(report, ecus, protocolLocked = report.detected?.automatic == false)
+            }
+            is InitOutcome.Failure -> {
+                outcome.warnings.forEach { log.add(Direction.INFO, "Init warning: $it") }
+                val detail = describe(outcome.result)
+                log.add(Direction.INFO, "Init failed at ${outcome.step}: $detail. ${outcome.hint}")
+                _carLink.value = CarLinkState.Failed(outcome.step, detail, outcome.hint)
+            }
+        }
+    }
+
+    /** Forget the saved protocol; the next connect auto-detects again (ATSP0). */
+    fun forgetProtocol() {
+        protocolStore.clear()
+        _savedProtocol.value = null
+        log.add(Direction.INFO, "Saved protocol cleared; next connect will auto-detect")
     }
 
     fun disconnect() {
@@ -124,16 +198,12 @@ class ConsoleViewModel(application: Application) : AndroidViewModel(application)
 
     fun send(raw: String) {
         if (raw.isBlank()) return
-        val s = sender ?: run {
+        val driver = elm ?: run {
             log.add(Direction.INFO, "Not connected")
             return
         }
         viewModelScope.launch {
-            try {
-                s.send(raw)
-            } catch (e: IOException) {
-                log.add(Direction.INFO, "Send failed: ${e.message}")
-            }
+            log.add(Direction.INFO, "→ ${describe(driver.execute(raw))}")
         }
     }
 
@@ -141,6 +211,13 @@ class ConsoleViewModel(application: Application) : AndroidViewModel(application)
 
     override fun onCleared() {
         userClosed = true
+    }
+
+    private fun describe(result: ElmResult): String = when (result) {
+        is ElmResult.Ok -> "OK: " + result.lines.joinToString(" | ")
+        ElmResult.NoData -> "NO DATA"
+        ElmResult.Timeout -> "no reply (timeout)"
+        is ElmResult.Error -> "error: ${result.message}"
     }
 
     companion object {

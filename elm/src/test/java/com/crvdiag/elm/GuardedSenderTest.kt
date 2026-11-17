@@ -29,8 +29,8 @@ class GuardedSenderTest {
 
     @Test
     fun `refused command never reaches the transport`() = runTest {
-        assertTrue(sender.send("AT SH 7E0") is Verdict.Refused)
+        assertTrue(sender.send("AT SH 7C0") is Verdict.Refused)
         assertTrue(transport.sent.isEmpty())
-        assertEquals(listOf("ATSH7E0"), refused)
+        assertEquals(listOf("ATSH7C0"), refused)
     }
 }
