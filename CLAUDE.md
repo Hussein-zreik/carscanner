@@ -13,7 +13,7 @@ Built in phases; read this file at the start of every session.
 - No electronic AWD module (rear drive is mechanical).
 
 ## Hardware
-- Tablet: Android (exact model TBD) — install via USB/Wireless debugging.
+- Tablet: Samsung Galaxy Tab A9+, Android 16 (API 36) — install via USB/Wireless debugging.
 - Adapter now: generic ELM327 clone "V03H4", Bluetooth Classic (SPP) + Wi-Fi.
   - Treat as unreliable: may report a fake version, drop replies, or ignore some AT commands.
   - Wi-Fi mode: usually 192.168.0.10:35000 (adapter hotspot).
@@ -89,13 +89,18 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
   (it is declared `apply false` in the root only to pin the Kotlin version).
 - All 6 modules are Android modules; unit tests run on the JVM with JUnit5 via
   `testOptions.unitTests.all { it.useJUnitPlatform() }` (no extra plugin).
+- Raw console sends only via `GuardedSender` + `ConsolePolicy` (obd module): adapter-only AT
+  commands + modes 01/02/03/07/09. Refused: ATSH/ATCRA/ATPP/ATSD/ATMA/ATFI/ATBI, mode 04, 22, all others.
+- Traffic log export format (future `testdata/` format): `HH:mm:ss.SSS TX|RX|INFO <text>` with `\r` escaped.
+- Library modules declare their own install-time permissions (lint checks them per module).
 - Room schemas are exported to `data/schemas/` and committed (needed for migrations).
 - applicationId / base package: `com.crvdiag.app`, modules `com.crvdiag.<module>`.
 
 ## Current status
 - [x] Session 1: Android project with the 6 modules, Compose, Room, one passing test
   (verified in CI-like container: `./gradlew test assembleDebug` green; not yet installed on tablet)
-- [ ] Session 2: Bluetooth transport + raw console screen
+- [~] Session 2: Bluetooth + Wi-Fi transports + raw console screen (code done, tests/lint green;
+  **awaiting tablet + car verification**: BT connect, Wi-Fi connect, ATZ/ATI/ATRV/0100 replies)
 - [ ] Session 3: ELM327 init + protocol detection logged
 - [ ] Session 4: Mode 01 live data (10 PIDs) + gauge screen
 - [ ] Session 5: DTCs (03/07), clear (04) with confirmation, freeze frame (02)

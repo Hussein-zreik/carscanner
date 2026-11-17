@@ -2,12 +2,14 @@ package com.crvdiag.app
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -15,10 +17,17 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.crvdiag.app.console.ConsoleScreen
 import com.crvdiag.app.ui.theme.CrvDiagTheme
+
+private enum class Screen { Home, Console }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -26,7 +35,14 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             CrvDiagTheme {
-                HomeScreen()
+                var screen by rememberSaveable { mutableStateOf(Screen.Home) }
+                when (screen) {
+                    Screen.Home -> HomeScreen(onOpenConsole = { screen = Screen.Console })
+                    Screen.Console -> {
+                        BackHandler { screen = Screen.Home }
+                        ConsoleScreen(onBack = { screen = Screen.Home })
+                    }
+                }
             }
         }
     }
@@ -34,7 +50,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen() {
+fun HomeScreen(onOpenConsole: () -> Unit) {
     Scaffold(
         topBar = { TopAppBar(title = { Text("CR-V Diag") }) },
     ) { padding ->
@@ -54,7 +70,8 @@ fun HomeScreen() {
             Card {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Adapter", style = MaterialTheme.typography.titleMedium)
-                    Text("Not connected (Bluetooth transport arrives in Session 2)")
+                    Text("Bluetooth (paired V03H4) or Wi-Fi (192.168.0.10:35000)")
+                    Button(onClick = onOpenConsole) { Text("Open adapter console") }
                 }
             }
         }
@@ -64,5 +81,5 @@ fun HomeScreen() {
 @Preview(widthDp = 800, heightDp = 480)
 @Composable
 private fun HomeScreenPreview() {
-    CrvDiagTheme { HomeScreen() }
+    CrvDiagTheme { HomeScreen(onOpenConsole = {}) }
 }
