@@ -70,6 +70,19 @@ Dependencies flow one way: `app → honda/obd → elm → transport`; `data` use
 `ATZ` → `ATE0` (echo off) → `ATL0` (linefeeds off) → `ATS0` (spaces off) → `ATH1` (headers on, debug) → `ATSP0` (auto protocol) → `0100` → read `ATDPN` and log the detected protocol.
 Handle: `SEARCHING...`, `NO DATA`, `CAN ERROR`, `BUS INIT...ERROR`, `?`, `STOPPED`, partial lines, missing `>` prompt.
 
+## Product direction (owner decisions, 2026-11-17)
+- Goal: a **professional-grade tool for this one CR-V** (dealer-level reading + diagnosis). Not multi-car,
+  not commercial.
+- **Read-only forever:** read, diagnose, report, clear codes. No relearns, actuator tests, coding,
+  SRS crash-data reset, immobilizer or flashing; those are done with Honda HDS at a shop.
+- First professional feature after the car test: **full-system scan + dated PDF report**
+  (pre-repair / post-repair / health check). Engine part works with the clone; SRS/VSA/TPMS need the
+  OBDLink MX+ and captured Honda module addresses (TODO(capture)); until then the report lists them
+  as "not scanned", never as "no codes".
+- Later pro features (in order unless changed): Honda live data (Phase 2), diagnostic guidance
+  (causes ranked for this car, drive-cycle guide, verified known issues), pro graphing.
+- Validate values against a reference tool (Car Scanner now, Honda HDS once if possible).
+
 ## Roadmap
 | Phase | Scope | Adapter | Done when |
 |---|---|---|---|
