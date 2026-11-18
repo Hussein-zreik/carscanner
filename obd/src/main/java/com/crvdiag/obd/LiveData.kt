@@ -43,14 +43,18 @@ class LiveDataSession(
     var multiPidWorks: Boolean = true
         private set
 
-    private val canAddress = protocol?.isCan == true && requestId != null
+    /**
+     * Physical addressing (ATSH to one unit) only on 11-bit CAN, where 7E0–7E7 are allow-listed.
+     * On 29-bit CAN requests stay functional and only the target unit's answers are used.
+     */
+    private val canAddress = protocol?.functionalHeader11 != null && requestId != null
 
-    /** Address the target unit only. Returns false if the adapter refused. */
+    /** Address the target unit only (11-bit). Returns false if the adapter refused. */
     suspend fun begin(): Boolean = !canAddress || elm.execute("ATSH$requestId").isOkLine()
 
-    /** Back to the functional address so other screens reach every unit again. */
+    /** Back to the functional address so other screens reach every unit again (11-bit only). */
     suspend fun end() {
-        if (canAddress) elm.execute("ATSH7DF")
+        if (canAddress) protocol?.functionalHeader11?.let { elm.execute("ATSH$it") }
     }
 
     /** Supported PIDs 01–0x60 of the target unit (0100, then 0120 / 0140 if announced). */

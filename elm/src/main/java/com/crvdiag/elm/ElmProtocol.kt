@@ -15,6 +15,13 @@ enum class ElmProtocol(val code: Char, val label: String, val isCan: Boolean, va
     J1939('A', "SAE J1939 CAN (29 bit, 250 kbaud)", true, 8),
     ;
 
+    /**
+     * The 11-bit functional ("all units") request header, or null on 29-bit CAN. On 29-bit the
+     * adapter's default after ATZ is already the functional header (18DB33F1), so the app must
+     * never send ATSH there: an 11-bit value like 7DF becomes a dead address (bug seen 2026-11-18).
+     */
+    val functionalHeader11: String? get() = if (isCan && headerHexDigits == 3) "7DF" else null
+
     companion object {
         fun byCode(code: Char): ElmProtocol? = entries.firstOrNull { it.code == code.uppercaseChar() }
 

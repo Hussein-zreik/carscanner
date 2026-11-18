@@ -51,9 +51,12 @@ class CodeClearer(
             return ClearOutcome.Refused("Engine is running (${it.toInt()} rpm). Turn the engine OFF, keep ignition ON.")
         }
 
-        // Functional address so every emissions ECU receives the clear.
-        val header = elm.execute("ATSH7DF", policy = ClearCodesPolicy)
-        if (header !is ElmResult.Ok) return ClearOutcome.Refused("Adapter rejected ATSH7DF. Not clearing.")
+        // Functional address so every emissions ECU receives the clear. On 29-bit CAN the default
+        // header after ATZ is already functional and is never changed by the app.
+        protocol?.functionalHeader11?.let { h ->
+            val header = elm.execute("ATSH$h", policy = ClearCodesPolicy)
+            if (header !is ElmResult.Ok) return ClearOutcome.Refused("Adapter rejected ATSH$h. Not clearing.")
+        }
 
         val reply = elm.execute("04", timeoutMs = 5_000, retries = 0, policy = ClearCodesPolicy)
         if (reply !is ElmResult.Ok) {

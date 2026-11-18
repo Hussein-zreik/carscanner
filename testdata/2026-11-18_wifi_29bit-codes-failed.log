@@ -1,0 +1,94 @@
+# CR-V Diag recording #2 — first run of the automatic startup (app 0.8.0)
+# Date: 2026-11-18 · Tablet: Galaxy Tab A9+ · Adapter: V03H4 clone over Wi-Fi 192.168.0.10:35000
+# Car state: check-engine light ON (Car Scanner showed the EVAP code); engine off, later running (ATRV 14.0V).
+# Source: Advanced → Copy log, pasted by the owner (text, exact).
+# FINDINGS: protocol 7 = ISO 15765-4 CAN 29-bit 500 kbaud (NOT 11-bit). ECUs answer as 18DAF111 (engine
+# PIDs) and 18DAF11D (smaller set). After the app sent the 11-bit header ATSH7DF, every request got
+# NO DATA (bug fixed in 0.8.2: never change the header on 29-bit).
+20:31:51.435 INFO Connecting: Wi-Fi · 192.168.0.10:35000
+20:31:51.521 INFO Connected
+20:31:51.522 INFO Init: start (protocol auto)
+20:31:51.523 TX ATZ\r
+20:31:51.553 RX ATZ\r
+20:31:52.507 RX \r\rELM327 v1.5\r\r>
+20:31:52.517 TX ATE0\r
+20:31:52.521 RX ATE0\r
+20:31:52.566 RX OK\r\r>
+20:31:52.569 TX ATL0\r
+20:31:52.576 RX OK\r\r>
+20:31:52.578 TX ATS0\r
+20:31:52.605 RX OK\r\r>
+20:31:52.606 TX ATH1\r
+20:31:52.625 RX OK\r\r>
+20:31:52.626 TX ATSP0\r
+20:31:52.646 RX OK\r\r>
+20:31:52.647 TX ATRV\r
+20:31:52.692 RX 11.9V\r\r>
+20:31:52.695 TX 0100\r
+20:31:52.701 RX SEARCHING...\r
+20:31:53.223 RX 18DAF11D064100983A8003\r18DAF111064100BE3FA813\r\r>
+20:31:53.226 TX ATDPN\r
+20:31:53.263 RX A7\r\r>
+20:31:53.266 INFO Init: ELM327 v1.5, 11.9V, protocol 7 ISO 15765-4 CAN (29 bit, 500 kbaud)
+20:31:53.273 INFO ECU 18DAF11D (request 18DA1DF1): PIDs 01,04,05,0B,0C,0D,0F,11,1F,20
+20:31:53.273 INFO ECU 18DAF111 (request 18DA11F1): PIDs 01,03,04,05,06,07,0B,0C,0D,0E,0F,10,11,13,15,1C,1F,20
+20:31:53.274 INFO Init: protocol 7 saved; next connect uses ATSP7
+20:31:53.341 TX ATSH7DF\r
+20:31:53.356 RX OK\r\r>
+20:31:53.358 TX 0101\r
+20:31:53.566 RX NO DATA\r\r>
+20:31:53.570 TX 03\r
+20:31:53.781 RX NO DATA\r\r>
+20:31:53.784 TX 07\r
+20:31:54.143 RX NO DATA\r\r>
+20:31:54.146 TX 020200\r
+20:31:54.357 RX NO DATA\r\r>
+20:31:54.360 INFO Codes: stored={} pending={} incomplete={}
+20:32:27.481 INFO REFUSED ATSH18DA11F1: AT command not on the adapter allow-list
+20:32:27.482 TX ATSH7DF\r
+20:32:27.676 RX OK\r\r>
+20:32:27.677 INFO Live: stopped
+20:34:20.832 INFO Link error: Software caused connection abort
+20:35:04.531 INFO Connecting: Wi-Fi · 192.168.0.10:35000
+20:35:04.588 INFO Connected
+20:35:04.588 INFO Init: start (protocol 7 saved)
+20:35:04.589 TX ATZ\r
+20:35:05.536 RX \r\rELM327 v1.5\r\r>
+20:35:05.539 TX ATE0\r
+20:35:05.559 RX ATE0\r
+20:35:05.602 RX OK\r\r>
+20:35:05.603 TX ATL0\r
+20:35:05.625 RX OK\r\r>
+20:35:05.626 TX ATS0\r
+20:35:05.641 RX OK\r\r>
+20:35:05.642 TX ATH1\r
+20:35:05.656 RX OK\r\r>
+20:35:05.657 TX ATSP7\r
+20:35:05.678 RX OK\r\r>
+20:35:05.679 TX ATRV\r
+20:35:05.733 RX 12.3V\r\r>
+20:35:05.736 TX 0100\r
+20:35:05.976 RX 18DAF11D064100983A8003\r18DAF111064100BE3FA813\r\r>
+20:35:05.978 TX ATDPN\r
+20:35:05.984 RX 7\r\r>
+20:35:06.042 TX ATSH7DF\r
+20:35:06.047 RX OK\r\r>
+20:35:06.048 TX 0101\r
+20:35:06.286 RX NO DATA\r\r>
+20:35:06.289 TX 03\r
+20:35:06.666 RX NO DATA\r\r>
+20:35:06.669 TX 07\r
+20:35:06.920 RX NO DATA\r\r>
+20:35:06.922 TX 020200\r
+20:35:07.133 RX NO DATA\r\r>
+20:35:35.152 INFO Saved protocol cleared; next connect will auto-detect
+20:35:40.763 TX ATI\r
+20:35:40.820 RX ELM327 v1.5\r\r>
+20:35:42.484 TX ATRV\r
+20:35:42.525 RX 14.0V\r\r>
+20:35:43.474 TX ATDPN\r
+20:35:43.503 RX 7\r\r>
+20:35:44.867 TX 0100\r
+20:35:45.165 RX NO DATA\r\r>
+20:35:46.214 TX 0101\r
+20:35:46.496 RX NO DATA\r\r>

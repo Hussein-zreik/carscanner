@@ -50,8 +50,9 @@ class DiagnosticsReader(
                 is ElmResult.Error -> null.also { problems += "$what: ${r.message}" }
             }
 
-        // Live data may have left the adapter addressing one unit: talk to all of them again.
-        if (protocol?.isCan == true) elm.execute("ATSH7DF")
+        // 11-bit CAN: live data may have addressed one unit; talk to all of them again.
+        // 29-bit CAN: the header is never changed (see ElmProtocol.functionalHeader11).
+        protocol?.functionalHeader11?.let { elm.execute("ATSH$it") }
 
         onStep("Readiness (0101)")
         val readiness = messages("0101", "Readiness").orEmpty()

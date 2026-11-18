@@ -8,7 +8,9 @@ Built in phases; read this file at the start of every session.
 - VIN: 5J6RE4H50BL017022
 - Engine: 2.4L K24Z6 · Transmission: 5-speed automatic
 - Networks behind the OBD port:
-  - **F-CAN** (pins 6/14, ISO 15765-4, 500 kbps, 11-bit): PCM (engine + transmission in one unit)
+  - **F-CAN** (pins 6/14, ISO 15765-4, 500 kbps, **29-bit**, ELM protocol **7** — verified on the car
+    2026-11-18; the earlier "11-bit" assumption was wrong). Units answering OBD: **18DAF111** (engine
+    PIDs: fuel trims, MAF, O2) and **18DAF11D** (smaller set, likely transmission side).
   - **K-line** (pin 7): VSA/ABS, SRS (airbags), TPMS, immobilizer, audio
 - No electronic AWD module (rear drive is mechanical).
 
@@ -20,13 +22,16 @@ Built in phases; read this file at the start of every session.
   - Observed: `ATI` → `ELM327 v1.5` (clone version); echo is ON after `ATZ` and arrives as its
     own chunk; `0100` → `SEARCHING...` then replies (see `testdata/2026-11-17_wifi_first-contact.log`).
   - **Two ECUs answer `0100`** (support masks `BE3FA813` = engine-type set, `983A8003` = smaller set,
-    likely the transmission side). CAN IDs unconfirmed until a run with `ATH1` (Session 3).
+    likely the transmission side). Confirmed with ATH1 on 2026-11-18: 18DAF111 and 18DAF11D (29-bit).
   - Engine ECU (mask `BE3FA813`) supports 01,03,04,05,06,07,0B,0C,0D,0E,0F,10,11,13,15,1C,1F,20.
     No PID 14 (upstream narrowband O2) → upstream is probably a wideband A/F sensor; confirm via `0120`.
-  - Plan: once protocol 6 is confirmed, pin `ATSP6` instead of auto-search so the adapter never
-    probes the K-line (pin 7: SRS/VSA/immobilizer) during startup.
+  - Protocol 7 is saved after the first auto-detect and later connects use `ATSP7` (no K-line probing).
+  - **Never send ATSH on 29-bit CAN.** The default header after ATZ is already functional (18DB33F1);
+    sending the 11-bit `ATSH7DF` made every request return NO DATA (bug 2026-11-18, fixed 0.8.2).
+    Live data on 29-bit stays functional and keeps only 18DAF111's answers.
   - **Approved by owner 2026-11-17:** `ATSH7DF` and `ATSH7E0`–`ATSH7E7` only (standard OBD IDs) so
-    requests can target one ECU; every other ATSH value stays refused.
+    requests can target one ECU; every other ATSH value stays refused. These only apply to 11-bit CAN,
+    which this car does NOT use; on this car the app sends no ATSH at all.
 - Adapter for Phase 3: OBDLink MX+ (STN chip, ELM327-compatible + extended ST commands). Not owned yet (2026-11-17).
 
 ## SAFETY RULES (non-negotiable)
@@ -158,8 +163,8 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
     (single-client limit or pairing likely; iPhone Car Scanner uses the adapter over Wi-Fi, so no
     evidence of BLE-only). Resume when user re-scans; do not
     build a BLE transport without confirmation. Wi-Fi is the working link for now.
-- [~] Session 3: ELM327 init + protocol detection + ECU discovery (code done, 100 unit tests green
-  incl. replay of the real recording; **awaiting car test**: auto-start on Connect, protocol, ECU IDs)
+- [x] Session 3: ELM327 init + protocol detection + ECU discovery — **verified on the car 2026-11-18**
+  (auto-start, protocol 7 detected and saved, ATSP7 on reconnect, both units identified).
 - [~] Session 4: Live data screen: engine ECU only (ATSH7E0), multi-PID requests (≤6, auto-fallback to
   single), 0100/0120/0140 discovery, 4 dial gauges + tiles with sparklines, quick checks (trims,
   charging, upstream λ, downstream O2, coolant), units °C/°F·km/h/mph·kPa/psi (default °C, mph, psi),
@@ -204,9 +209,10 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
   fault likely; car has front-end salvage history. App cannot read SRS until Phase 3 (K-line, MX+).
   Owner advised to get a professional Honda-capable SRS scan.
 - **Bug report 2026-11-18 (owner):** check-engine light ON, CR-V Diag showed no code, Car Scanner showed
-  the EVAP code. Fixed display defects in 0.8.1: NO DATA to 03/07/0101 is now a failed read (never
-  "no codes"), unread MIL = "Unknown" (never "OFF"), MIL ON + no stored code = explicit warning.
-  **Root cause not yet confirmed: owner's log/data did not arrive; ask for it.**
+  the EVAP code. 0.8.1 fixed the display (NO DATA ≠ "no codes", unread MIL = "Unknown"). **Root cause
+  (from the owner's log, testdata/2026-11-18_wifi_29bit-codes-failed.log): the app sent the 11-bit
+  ATSH7DF on this 29-bit car → every request NO DATA. Fixed in 0.8.2** (no ATSH on 29-bit); awaiting
+  retest on the car. Same log: ATRV 14.0 V with the engine running → charging normal.
 - Battery (ATRV, engine off, ignition on, 2026-11-17): 12.1 V → 11.8 V. Recheck resting (≥12.4 V)
   and running (13.7–14.7 V) voltage.
 - Car history: salvage-titled 2017 (front-end), repaired 2018; odometer branded "not actual" — the
