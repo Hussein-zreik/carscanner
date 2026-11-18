@@ -92,7 +92,7 @@ Handle: `SEARCHING...`, `NO DATA`, `CAN ERROR`, `BUS INIT...ERROR`, `?`, `STOPPE
 | Phase | Scope | Adapter | Done when |
 |---|---|---|---|
 | 1 Core | BT connect, read/clear engine DTCs, freeze frame, readiness, live gauges (10+ PIDs), CSV log, Wi-Fi fallback | Clone | Stable for a full 20-min drive |
-| 2 Honda PCM | Mode 22 values (ATF temp, VTC, knock, etc.), performance dashboard, temp alerts | Clone / MX+ | Values match Car Scanner on same drive |
+| 2 Honda PCM | (2a capture mode built 0.13.0) Mode 22 values (ATF temp, VTC, knock, etc.), performance dashboard, temp alerts | Clone / MX+ | Values match Car Scanner on same drive |
 | 3 K-line | Read then clear VSA/ABS, SRS, TPMS codes; wheel speeds; health baseline | MX+ | Codes match OBDLink app |
 | 4 Extras | Maintenance tracker (oil, ATF, rear diff fluid) from user's odometer, trip computer, history, reports | Any | Used weekly |
 
@@ -246,6 +246,21 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
     (`obdRead`); the report lists all 4 cylinders ("not read" instead of missing rows).
   - Junk after the prompt (tails of earlier replies) comes from the clone's Wi-Fi bridge, not the app.
   - Wi-Fi link dropped ("Software caused connection abort") every 1–2 min; automatic reconnect recovered most times.
+- [~] **Phase 2a: Honda capture mode (0.13.0, owner request 2026-11-18: "go to Phase 2", Phase 1 stays open)**,
+  code done + tests green, **awaiting first capture on the car**:
+  - Advanced → Honda capture: the tablet listens on its Wi-Fi IP, port 35000; Car Scanner (iPhone, same adapter Wi-Fi,
+    custom IP) connects to the tablet; `CaptureRelay` (honda/capture) forwards to the adapter and records everything
+    to filesDir/captures/capture_*.log (testdata format) + a summary of Honda requests per header (`CaptureSummary`).
+    The app's own link is closed first (adapter = one TCP client). Shared from Logs & reports.
+  - **`CapturePolicy` (owner-approved 2026-11-18, "Approve (Recommended)")**: used ONLY for relayed client requests.
+    Allows adapter-only AT settings incl. any ATSH/ATCRA/ATCF/ATCM/flow control, and read services 01 02 03 06 07 09 0A
+    12 13 17 18 19 1A 21 22. Blocks 04/14/10/11/27/2E/2F/30/31/3B/3D/23/34–37/28/85/3E, ATPP/ATSD/ATMA/ATFI/ATSI/ATBI/
+    ATBRD/ATLP, STN commands, anything unlisted → answered "?" and logged "BLOCKED". The app's own requests keep
+    ConsolePolicy and still never send ATSH on 29-bit.
+  - Unknown until tried: whether Car Scanner shows Honda values for the RE4 profile (owner "not sure"), whether it
+    allows a custom Wi-Fi IP, and whether the clone's hotspot allows two clients talking to each other.
+  - Phase 2b (after a capture): add ONLY captured request IDs to a honda allow-list, decode values checked against
+    the owner's Car Scanner screenshots; priorities (owner): ATF temperature, knock/timing, VTC/cam, idle air/ELD/purge.
 - Phase 1 status: all six sessions coded; Phase 1 is DONE only after a stable 20-min recorded drive.
 
 ## Notes

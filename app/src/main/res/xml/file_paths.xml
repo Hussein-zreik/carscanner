@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Only drive logs and scan reports can be shared (user-initiated, via Android's share menu). -->
+<!-- Only drive logs, scan reports and Phase 2 captures can be shared (user-initiated, via Android's share menu). -->
 <paths>
     <files-path name="logs" path="logs/" />
     <files-path name="reports" path="reports/" />
+    <files-path name="captures" path="captures/" />
 </paths>

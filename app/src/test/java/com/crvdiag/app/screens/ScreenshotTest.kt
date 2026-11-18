@@ -327,4 +327,19 @@ class ScreenshotTest {
             .forEach { (t, d) -> connection.log.add(d, t) }
         shoot("7-advanced", Destination.Advanced) { AdvancedScreen(connection) }
     }
+
+    @Test fun capture() {
+        val vm = com.crvdiag.app.capture.CaptureViewModel(ApplicationProvider.getApplicationContext())
+        vm.showPreview(
+            com.crvdiag.app.capture.CaptureState.Running(
+                "192.168.0.11", 35000,
+                com.crvdiag.honda.capture.CaptureRelay.Stats(
+                    clientConnected = true, relayed = 214, blocked = 1,
+                    recent = listOf("ATZ", "ATE0", "ATSP7", "0100", "010C", "BLOCKED 1003", "010D"),
+                ),
+                java.io.File("capture_preview.log"),
+            ),
+        )
+        shoot("18-capture", Destination.Capture) { com.crvdiag.app.capture.CaptureScreen(vm, {}, {}) }
+    }
 }

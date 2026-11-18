@@ -64,7 +64,7 @@ private val QUICK_COMMANDS = listOf("ATI", "ATRV", "ATDPN", "0100", "0101")
  * communication log (the "Debug screen" from CLAUDE.md).
  */
 @Composable
-fun AdvancedScreen(vm: ConnectionViewModel) {
+fun AdvancedScreen(vm: ConnectionViewModel, onOpenCapture: () -> Unit = {}) {
     val link by vm.state.collectAsState()
     val carLink by vm.carLink.collectAsState()
     val savedProtocol by vm.savedProtocol.collectAsState()
@@ -107,6 +107,11 @@ fun AdvancedScreen(vm: ConnectionViewModel) {
                     if (savedProtocol != null) {
                         OutlinedButton(onClick = vm::forgetProtocol) { Text("Re-detect protocol on next connect") }
                     }
+                }
+                SectionCard("Honda capture (Phase 2)", Modifier.fillMaxWidth(), icon = Icons.Filled.Build) {
+                    MutedText("Record the Honda-only requests Car Scanner sends (transmission temperature, knock, VTC…), " +
+                        "relayed read-only through this tablet.")
+                    OutlinedButton(onClick = onOpenCapture) { Text("Open capture mode") }
                 }
                 SectionCard("Send a command", Modifier.fillMaxWidth(), icon = Icons.Filled.Build) {
                     MutedText("Only allow-listed, read-only commands are sent. Anything else is refused and logged.")

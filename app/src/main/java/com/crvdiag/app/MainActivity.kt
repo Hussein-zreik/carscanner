@@ -12,6 +12,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.crvdiag.app.capture.CaptureScreen
+import com.crvdiag.app.capture.CaptureViewModel
 import com.crvdiag.app.cartest.CarTestScreen
 import com.crvdiag.app.cartest.CarTestViewModel
 import com.crvdiag.app.codes.CodesScreen
@@ -55,6 +57,7 @@ class MainActivity : ComponentActivity() {
                 val carTest: CarTestViewModel = viewModel()
                 val misfire: MisfireViewModel = viewModel()
                 val tests: TestsViewModel = viewModel()
+                val capture: CaptureViewModel = viewModel()
                 // Which test is open inside the Tests hub: null = list, "misfire" or a TestKind name.
                 var openTest by rememberSaveable { mutableStateOf<String?>(null) }
                 LaunchedEffect(Unit) {
@@ -120,7 +123,12 @@ class MainActivity : ComponentActivity() {
                             carTest.run(connection, liveState.recording != null, maintenance.state.value.odometer)
                         }
                         Destination.Connection -> ConnectionScreen(connection)
-                        Destination.Advanced -> AdvancedScreen(connection)
+                        Destination.Advanced -> AdvancedScreen(connection, onOpenCapture = { current = Destination.Capture })
+                        Destination.Capture -> CaptureScreen(
+                            capture,
+                            onStart = { capture.start(connection) },
+                            onBack = { current = Destination.Advanced },
+                        )
                     }
                 }
             }

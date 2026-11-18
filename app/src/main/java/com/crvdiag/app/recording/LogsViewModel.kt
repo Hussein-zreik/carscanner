@@ -17,6 +17,22 @@ import java.io.File
 class LogsViewModel(application: Application) : AndroidViewModel(application) {
     val dir = File(application.filesDir, "logs")
     val reportsDir = File(application.filesDir, "reports")
+    val capturesDir = File(application.filesDir, "captures")
+
+    private val _captures = MutableStateFlow<List<File>>(emptyList())
+    /** Phase 2 capture files, newest first. */
+    val captures: StateFlow<List<File>> = _captures.asStateFlow()
+
+    fun refreshCaptures() = viewModelScope.launch {
+        _captures.value = withContext(Dispatchers.IO) {
+            capturesDir.listFiles { f -> f.name.endsWith(".log") }.orEmpty().sortedByDescending { it.name }
+        }
+    }
+
+    fun deleteCapture(f: File) = viewModelScope.launch {
+        withContext(Dispatchers.IO) { f.delete() }
+        refreshCaptures()
+    }
     private val dao by lazy { CrvDatabase.get(application).driveLogDao() }
     private val reportDao by lazy { CrvDatabase.get(application).scanReportDao() }
 
@@ -31,6 +47,7 @@ class LogsViewModel(application: Application) : AndroidViewModel(application) {
     fun observe() {
         if (observing) return
         observing = true
+        refreshCaptures()
         viewModelScope.launch { dao.observeAll().collect { _logs.value = it } }
         viewModelScope.launch { reportDao.observeAll().collect { _reports.value = it } }
     }

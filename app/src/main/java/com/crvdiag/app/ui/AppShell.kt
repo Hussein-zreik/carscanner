@@ -49,6 +49,8 @@ enum class Destination(val label: String, val icon: ImageVector, val inRail: Boo
     Advanced("Advanced", Icons.Filled.Build),
     /** Opened from the Dashboard's "Run car test" button. */
     CarTest("Car test", Icons.Filled.CheckCircle, inRail = false),
+    /** Phase 2 capture, opened from Advanced. */
+    Capture("Honda capture", Icons.Filled.Build, inRail = false),
 }
 
 /** One-word connection state for the narrow rail. */

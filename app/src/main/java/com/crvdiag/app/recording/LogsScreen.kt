@@ -53,7 +53,11 @@ fun LogsScreen(vm: LogsViewModel) {
     var reportToDelete by remember { mutableStateOf<ScanReportEntity?>(null) }
     val context = LocalContext.current
     var toDelete by remember { mutableStateOf<DriveLogEntity?>(null) }
-    LaunchedEffect(Unit) { vm.observe() }
+    val captures by vm.captures.collectAsState()
+    LaunchedEffect(Unit) {
+        vm.observe()
+        vm.refreshCaptures()
+    }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(28.dp),
@@ -72,6 +76,20 @@ fun LogsScreen(vm: LogsViewModel) {
                     }
                     Button(onClick = { shareFile(context, pdf, "application/pdf") }, enabled = pdf.exists()) { Text("Share PDF") }
                     TextButton(onClick = { reportToDelete = r }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Delete") }
+                }
+            }
+        }
+        if (captures.isNotEmpty()) {
+            SectionCard("Honda captures (Phase 2)", Modifier.fillMaxWidth(), icon = Icons.AutoMirrored.Filled.List) {
+                captures.forEach { f ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(f.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            MutedText("%.1f KB".format(f.length() / 1024.0))
+                        }
+                        Button(onClick = { shareFile(context, f, "text/plain") }) { Text("Share") }
+                        TextButton(onClick = { vm.deleteCapture(f) }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Delete") }
+                    }
                 }
             }
         }

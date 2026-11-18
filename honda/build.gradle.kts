@@ -23,6 +23,7 @@ android {
 dependencies {
     api(project(":elm"))
     implementation(project(":obd"))
+    implementation(libs.kotlinx.coroutines.core)
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.bundles.unit.test)
     testRuntimeOnly(libs.junit.platform.launcher)
