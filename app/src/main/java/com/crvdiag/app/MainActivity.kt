@@ -25,6 +25,8 @@ import com.crvdiag.app.console.AdvancedScreen
 import com.crvdiag.app.dashboard.DashboardScreen
 import com.crvdiag.app.dashboard.linkSummary
 import com.crvdiag.app.live.LiveDataScreen
+import com.crvdiag.app.misfire.MisfireScreen
+import com.crvdiag.app.misfire.MisfireViewModel
 import com.crvdiag.app.live.LiveViewModel
 import com.crvdiag.app.maintenance.MaintenanceScreen
 import com.crvdiag.app.maintenance.MaintenanceViewModel
@@ -47,6 +49,7 @@ class MainActivity : ComponentActivity() {
                 val logs: LogsViewModel = viewModel()
                 val maintenance: MaintenanceViewModel = viewModel()
                 val carTest: CarTestViewModel = viewModel()
+                val misfire: MisfireViewModel = viewModel()
                 LaunchedEffect(Unit) {
                     maintenance.observe()
                     live.attach(connection) // recordings continue after an automatic reconnect
@@ -84,6 +87,16 @@ class MainActivity : ComponentActivity() {
                             CodesScreen(connection, codes, service.odometer, onOpenConnection = { current = Destination.Connection })
                         }
                         Destination.Live -> LiveDataScreen(connection, live)
+                        Destination.Misfire -> MisfireScreen(
+                            misfire, connected = carLink is CarLinkState.Ready,
+                            onStart = {
+                                val report = (codes.state.value as? CodesState.Done)?.report
+                                val known = report?.let { it.stored.values.flatten() + it.pending.values.flatten() }.orEmpty()
+                                misfire.start(connection.elmOrNull(), carLink, connection.log,
+                                    com.crvdiag.obd.MisfireAnalysis.misfireCodesIn(known), liveState.recording != null)
+                            },
+                            onOpenLive = { current = Destination.Live },
+                        )
                         Destination.Logs -> LogsScreen(logs)
                         Destination.Maintenance -> MaintenanceScreen(maintenance)
                         Destination.CarTest -> CarTestScreen(carTest) {

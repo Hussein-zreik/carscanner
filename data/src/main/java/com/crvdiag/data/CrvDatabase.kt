@@ -12,12 +12,13 @@ import androidx.room.RoomDatabase
         MaintenanceItemEntity::class, ServiceRecordEntity::class, OdometerReadingEntity::class,
         ScanReportEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 1, to = 2), // v2 adds drive_logs
         AutoMigration(from = 2, to = 3), // v3 adds maintenance tables
         AutoMigration(from = 3, to = 4), // v4 adds scan_reports
+        AutoMigration(from = 4, to = 5), // v5 adds drive_logs.misfireSummary (drive watch)
     ],
 )
 abstract class CrvDatabase : RoomDatabase() {

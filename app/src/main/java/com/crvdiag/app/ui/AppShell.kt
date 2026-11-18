@@ -42,6 +42,7 @@ enum class Destination(val label: String, val icon: ImageVector, val inRail: Boo
     Dashboard("Dashboard", Icons.Filled.Home),
     Codes("Codes", Icons.Filled.Warning),
     Live("Live data", AppIcons.Gauge),
+    Misfire("Misfire", AppIcons.Spark),
     Logs("Logs", Icons.AutoMirrored.Filled.List),
     Maintenance("Service", Icons.Filled.DateRange),
     Connection("Connection", AppIcons.Plug),

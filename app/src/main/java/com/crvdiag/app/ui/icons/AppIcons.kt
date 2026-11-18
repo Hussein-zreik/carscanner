@@ -23,6 +23,13 @@ object AppIcons {
         }
     }
 
+    /** Spark / lightning bolt (misfire check). */
+    val Spark: ImageVector by lazy {
+        outline("Spark") {
+            moveTo(13f, 2f); lineTo(5f, 13f); lineTo(11f, 13f); lineTo(10f, 22f); lineTo(19f, 10f); lineTo(13f, 10f); close()
+        }
+    }
+
     val Plug: ImageVector by lazy {
         outline("Plug") {
             // Two prongs, rounded body, cable.

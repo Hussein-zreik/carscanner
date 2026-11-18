@@ -209,6 +209,16 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
     permanent codes + misfires, 20 s live data, PDF report; ✅/⚠️/❌ per step; results file
     `reports/car-test_*.txt` (summary lines start with '#', followed by the raw log → valid testdata).
     `CarTestRunner` is Android-free and tested against 29-bit replay data.
+- [~] Misfire check (0.10.0, owner request 2026-11-18: **rough/shaky idle reported**), code done + tests green:
+  - `MisfireReader` (obd): service 06 MIDs A2–A5, TID 0C (this cycle) + 0B (10-cycle average), engine
+    unit only; `MisfireAnalysis`: new misfires per cylinder (counter reset handled), RPM steadiness
+    (SD > 40 rpm = unsteady, guide value), fuel trims (±10 % rich/lean), misfire codes P0300–P0304,
+    "smooth data but shaky feel → mounts" hint; P145C/purge-valve link stated as a common cause, not fact.
+  - Misfire screen (rail): guided 2-min parked idle test (aborts if speed > 5 km/h), counters polled
+    every 10 s; drive watch: counters read at recording start/end, summary saved in
+    `drive_logs.misfireSummary` (DB v5, auto-migration 4→5) and shown in Logs + Misfire screen.
+  - Unknown: whether this Honda updates mode 06 counters during a cycle or only at its end; the screen
+    says so if counters don't move. Verify on the car.
 - Phase 1 status: all six sessions coded; Phase 1 is DONE only after a stable 20-min recorded drive.
 
 ## Notes
@@ -225,6 +235,8 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
   (from the owner's log, testdata/2026-11-18_wifi_29bit-codes-failed.log): the app sent the 11-bit
   ATSH7DF on this 29-bit car → every request NO DATA. Fixed in 0.8.2** (no ATSH on 29-bit); awaiting
   retest on the car. Same log: ATRV 14.0 V with the engine running → charging normal.
+- **Symptom reported 2026-11-18: rough / shaky idle.** Car Scanner (2026-11-17) showed 0 misfires on all
+  cylinders. Candidates: misfire, EVAP purge valve stuck open (P145C), vacuum leak, worn mounts.
 - Battery (ATRV, engine off, ignition on, 2026-11-17): 12.1 V → 11.8 V. Recheck resting (≥12.4 V)
   and running (13.7–14.7 V) voltage.
 - Car history: salvage-titled 2017 (front-end), repaired 2018; odometer branded "not actual" — the

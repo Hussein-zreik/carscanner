@@ -35,6 +35,9 @@ import com.crvdiag.app.live.LiveDataScreen
 import com.crvdiag.app.live.LiveUiState
 import com.crvdiag.app.live.RecordingInfo
 import com.crvdiag.app.maintenance.MaintenanceScreen
+import com.crvdiag.app.misfire.IdleTestState
+import com.crvdiag.app.misfire.MisfireScreen
+import com.crvdiag.app.misfire.MisfireViewModel
 import com.crvdiag.app.maintenance.MaintenanceViewModel
 import com.crvdiag.app.recording.LogsScreen
 import com.crvdiag.app.recording.LogsViewModel
@@ -252,6 +255,19 @@ class ScreenshotTest {
             StepResult("PDF report", StepStatus.Pass, "report_HealthCheck_2026-11-18_21-04-10.pdf (9 KB)"),
         ), File("car-test_2026-11-18_21-03-02.txt"), File("report.pdf")))
         shoot("13-car-test", Destination.CarTest) { CarTestScreen(vm) {} }
+    }
+
+    @Test fun misfire() {
+        connected()
+        val vm = MisfireViewModel(ApplicationProvider.getApplicationContext())
+        // SYNTHETIC result: rough feel, random misfires with rich trims (purge-valve pattern).
+        val before = com.crvdiag.obd.MisfireSnapshot(0, mapOf(1 to 0, 2 to 0, 3 to 0, 4 to 0), emptyMap())
+        val after = com.crvdiag.obd.MisfireSnapshot(1, mapOf(1 to 2, 2 to 0, 3 to 3, 4 to 1), emptyMap())
+        val verdict = com.crvdiag.obd.MisfireAnalysis.evaluate(before, after, List(40) { if (it % 2 == 0) 690.0 else 800.0 },
+            listOf(-8.5), -4.0, 88.0, emptyList())
+        vm.showPreview(IdleTestState(newMisfires = verdict.newMisfires, verdict = verdict),
+            DriveLogEntity(3, 0, 1, "a.csv", "a.log", 4800, "Misfires during drive: cyl 1: 0 · cyl 2: 0 · cyl 3: 2 · cyl 4: 0"))
+        shoot("14-misfire", Destination.Misfire) { MisfireScreen(vm, connected = true, onStart = {}, onOpenLive = {}) }
     }
 
     @Test fun maintenance() {

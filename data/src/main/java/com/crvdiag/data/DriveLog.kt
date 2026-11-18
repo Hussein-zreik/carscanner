@@ -1,5 +1,6 @@
 package com.crvdiag.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Entity
 import androidx.room.Insert
@@ -17,6 +18,8 @@ data class DriveLogEntity(
     val csvFile: String,
     val rawFile: String,
     val rows: Int = 0,
+    /** Drive watch: misfires counted during the drive, e.g. "cyl 1: 0 · cyl 2: 3 · …" (v5). */
+    @ColumnInfo(defaultValue = "NULL") val misfireSummary: String? = null,
 )
 
 @Dao
@@ -26,6 +29,9 @@ interface DriveLogDao {
 
     @Query("UPDATE drive_logs SET endedAtEpochMs = :endedAt, rows = :rows WHERE id = :id")
     suspend fun finish(id: Long, endedAt: Long, rows: Int)
+
+    @Query("UPDATE drive_logs SET misfireSummary = :summary WHERE id = :id")
+    suspend fun setMisfireSummary(id: Long, summary: String)
 
     @Query("SELECT * FROM drive_logs ORDER BY startedAtEpochMs DESC")
     fun observeAll(): Flow<List<DriveLogEntity>>

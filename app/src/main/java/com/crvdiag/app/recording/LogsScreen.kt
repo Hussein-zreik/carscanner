@@ -37,6 +37,7 @@ import com.crvdiag.app.ui.components.ScreenHeader
 import com.crvdiag.app.ui.components.SectionCard
 import com.crvdiag.app.ui.components.StatusPill
 import com.crvdiag.app.ui.theme.Status
+import com.crvdiag.app.ui.theme.color
 import com.crvdiag.data.DriveLogEntity
 import java.io.File
 import java.time.Instant
@@ -97,6 +98,10 @@ fun LogsScreen(vm: LogsViewModel) {
                         )
                     }
                     if (log.endedAtEpochMs == null) StatusPill("Recording", Status.Fault)
+                }
+                log.misfireSummary?.let { m ->
+                    Text(m, color = if (Regex("cyl \\d: [1-9]").containsMatchIn(m)) Status.Warning.color() else MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(onClick = { shareFile(context, csv, "text/csv") }, enabled = csv.exists()) { Text("Share CSV") }

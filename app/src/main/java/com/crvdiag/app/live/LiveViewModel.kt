@@ -76,6 +76,9 @@ class LiveViewModel(application: Application) : AndroidViewModel(application) {
     @Volatile private var recorder: DriveRecorder? = null
     @Volatile private var recordId: Long? = null
     @Volatile private var trafficLog: TrafficLog? = null
+    /** Drive watch: misfire counters read at the start and end of each recorded drive. */
+    @Volatile private var misfireReader: com.crvdiag.obd.MisfireReader? = null
+    @Volatile private var misfireBaseline: com.crvdiag.obd.MisfireSnapshot? = null
     private val rawListener: (String) -> Unit = { line -> recorder?.rawLine(line) }
 
     fun setUnits(u: UnitPrefs) {
@@ -97,6 +100,7 @@ class LiveViewModel(application: Application) : AndroidViewModel(application) {
         // The engine computer is the one reporting fuel trims + MAF (see EcuNames).
         val engine = ready.ecus.firstOrNull { 0x06 in it.supportedPids && 0x10 in it.supportedPids } ?: ready.ecus.firstOrNull()
         val session = LiveDataSession(elm, ready.report.detected?.protocol, ready.report.headersOn, engine?.requestId)
+        misfireReader = com.crvdiag.obd.MisfireReader(elm, ready.report.detected?.protocol, ready.report.headersOn, engine?.responseId)
         _state.update { it.copy(starting = true, message = null) }
 
         job = viewModelScope.launch {
@@ -212,6 +216,7 @@ class LiveViewModel(application: Application) : AndroidViewModel(application) {
             dao.insert(DriveLogEntity(startedAtEpochMs = r.startedAtMs, csvFile = r.csvFile.name, rawFile = r.rawFile.name))
         }
         log.add(Direction.INFO, "Recording: started ${r.csvFile.name}")
+        misfireBaseline = runCatching { misfireReader?.read() }.getOrNull()?.takeIf { it.anyReported }
     }
 
     private suspend fun finishRecording(reason: String, keepService: Boolean = false) {
@@ -223,9 +228,21 @@ class LiveViewModel(application: Application) : AndroidViewModel(application) {
         }
         val id = recordId
         recordId = null
+        // Drive watch: compare the misfire counters with the start of the drive (if the link is still up).
+        val baseline = misfireBaseline
+        misfireBaseline = null
+        val summary = if (baseline == null) "Misfire counters not available at the start of this drive"
+        else runCatching { misfireReader?.read() }.getOrNull()?.takeIf { it.anyReported }?.let { end ->
+            com.crvdiag.obd.MisfireAnalysis.newMisfires(baseline, end).entries
+                .joinToString(" · ") { (c, n) -> "cyl $c: ${n ?: "?"}" }.let { "Misfires during drive: $it" }
+        } ?: "Link lost before the final misfire read"
+        trafficLog?.add(Direction.INFO, "Drive watch: $summary")
         withContext(Dispatchers.IO) {
             r.close()
-            id?.let { dao.finish(it, System.currentTimeMillis(), r.rows) }
+            id?.let {
+                dao.finish(it, System.currentTimeMillis(), r.rows)
+                dao.setMisfireSummary(it, summary)
+            }
         }
         if (!keepService) RecordingService.stop(getApplication())
         _state.update {
