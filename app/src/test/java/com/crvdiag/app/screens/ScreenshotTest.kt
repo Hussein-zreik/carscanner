@@ -7,6 +7,11 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.test.core.app.ApplicationProvider
+import com.crvdiag.app.cartest.CarTestScreen
+import com.crvdiag.app.cartest.CarTestState
+import com.crvdiag.app.cartest.CarTestViewModel
+import com.crvdiag.app.cartest.StepResult
+import com.crvdiag.app.cartest.StepStatus
 import com.crvdiag.app.codes.CodesScreen
 import com.crvdiag.app.codes.CodesState
 import com.crvdiag.app.codes.CodesViewModel
@@ -79,16 +84,16 @@ class ScreenshotTest {
     private val report = InitReport(
         adapterId = "ELM327 v1.5",
         voltage = "12.1V",
-        detected = DetectedProtocol(ElmProtocol.CAN_11_500, automatic = true),
-        pid00Lines = listOf("7E8064100BE3FA813", "7E9064100983A8003"),
+        detected = DetectedProtocol(ElmProtocol.CAN_29_500, automatic = true),
+        pid00Lines = listOf("18DAF111064100BE3FA813", "18DAF11D064100983A8003"),
         headersOn = true,
         warnings = emptyList(),
     )
-    private val ready = CarLinkState.Ready(report, EcuDiscovery.fromPid00(report.pid00Lines, ElmProtocol.CAN_11_500), false)
+    private val ready = CarLinkState.Ready(report, EcuDiscovery.fromPid00(report.pid00Lines, ElmProtocol.CAN_29_500), false)
     private val diagnostics = DiagnosticsReport(
-        readiness = mapOf("7E8" to Readiness.decode(0x00, 0x07, 0xE5, 0xA5), "7E9" to Readiness.decode(0, 0, 0, 0)),
-        stored = mapOf("7E8" to emptyList(), "7E9" to emptyList()),
-        pending = mapOf("7E8" to listOf("P145C"), "7E9" to emptyList()),
+        readiness = mapOf("18DAF111" to Readiness.decode(0x00, 0x07, 0xE5, 0xA5), "18DAF11D" to Readiness.decode(0, 0, 0, 0)),
+        stored = mapOf("18DAF111" to emptyList(), "18DAF11D" to emptyList()),
+        pending = mapOf("18DAF111" to listOf("P145C"), "18DAF11D" to emptyList()),
         freezeFrames = emptyMap(),
         problems = emptyList(),
     )
@@ -201,10 +206,10 @@ class ScreenshotTest {
     private fun reportInput() = ReportInput(
         type = ReportType.PreRepair, notes = "Before EVAP purge valve check at the shop.",
         createdAt = ZonedDateTime.now(), appVersion = "0.8.0", adapterId = "ELM327 v1.5",
-        protocolLabel = ElmProtocol.CAN_11_500.label, voltage = "12.1V", odometerMiles = 153_704, odometerEstimated = true,
+        protocolLabel = ElmProtocol.CAN_29_500.label, voltage = "12.1V", odometerMiles = 153_704, odometerEstimated = true,
         ecus = ready.ecus,
-        data = ScanData(diagnostics, permanent = mapOf("7E8" to emptyList()), vin = "5J6RE4H50BL017022",
-            calibrationIds = mapOf("7E8" to listOf("37805-RZA-A630")), ecuNames = mapOf("7E8" to "ECM-EngineControl"),
+        data = ScanData(diagnostics, permanent = mapOf("18DAF111" to emptyList()), vin = "5J6RE4H50BL017022",
+            calibrationIds = mapOf("18DAF111" to listOf("37805-RZA-A630")), ecuNames = mapOf("18DAF111" to "ECM-EngineControl"),
             misfires = (1..4).map { MisfireCount(it, 0, 0) }),
         describeCode = { com.crvdiag.honda.HondaDtcText.describe(it) ?: com.crvdiag.obd.DtcText.describe(it) },
     )
@@ -228,10 +233,25 @@ class ScreenshotTest {
     @Test fun codesMilWithoutCode() {
         connected()
         codes.showPreviewState(CodesState.Done(diagnostics.copy(
-            readiness = mapOf("7E8" to Readiness.decode(0x81, 0x07, 0xE5, 0xA5)),
+            readiness = mapOf("18DAF111" to Readiness.decode(0x81, 0x07, 0xE5, 0xA5)),
             stored = emptyMap(), storedRead = false, problems = listOf("Stored codes: no answer from the car"),
         )))
         shoot("12-codes-mil-unread", Destination.Codes) { CodesScreen(connection, codes, null) {} }
+    }
+
+    @Test fun carTest() {
+        connected()
+        val vm = CarTestViewModel(ApplicationProvider.getApplicationContext())
+        vm.showPreviewState(CarTestState.Done(listOf(
+            StepResult("Connection", StepStatus.Pass, "Wi-Fi · ELM327 v1.5 · battery 12.3V"),
+            StepResult("Car network", StepStatus.Pass, "ISO 15765-4 CAN (29 bit, 500 kbaud); 2 unit(s): 18DAF111, 18DAF11D"),
+            StepResult("Trouble codes & readiness", StepStatus.Pass, "Light ON · stored: P145C · pending: none"),
+            StepResult("VIN", StepStatus.Pass, "5J6RE4H50BL017022 (matches this car, check digit valid)"),
+            StepResult("Permanent codes & misfire counters", StepStatus.Warn, "permanent codes not read · misfires: cyl 1=0, cyl 2=0, cyl 3=0, cyl 4=0"),
+            StepResult("Live data", StepStatus.Pass, "112 updates (5.6/s), 14 different readings, 100% answered, several readings per request"),
+            StepResult("PDF report", StepStatus.Pass, "report_HealthCheck_2026-11-18_21-04-10.pdf (9 KB)"),
+        ), File("car-test_2026-11-18_21-03-02.txt"), File("report.pdf")))
+        shoot("13-car-test", Destination.CarTest) { CarTestScreen(vm) {} }
     }
 
     @Test fun maintenance() {
@@ -248,7 +268,7 @@ class ScreenshotTest {
     @Test fun advanced() {
         connected()
         listOf("ATZ\r" to Direction.TX, "\r\rELM327 v1.5\r\r>" to Direction.RX, "0100\r" to Direction.TX,
-            "7E8064100BE3FA813 \r7E9064100983A8003 \r\r>" to Direction.RX, "ECU 7E8 (request 7E0)" to Direction.INFO)
+            "18DAF111064100BE3FA813\r18DAF11D064100983A8003\r\r>" to Direction.RX, "ECU 18DAF111 (request 18DA11F1)" to Direction.INFO)
             .forEach { (t, d) -> connection.log.add(d, t) }
         shoot("7-advanced", Destination.Advanced) { AdvancedScreen(connection) }
     }

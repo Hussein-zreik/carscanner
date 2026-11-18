@@ -12,6 +12,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.crvdiag.app.cartest.CarTestScreen
+import com.crvdiag.app.cartest.CarTestViewModel
 import com.crvdiag.app.codes.CodesScreen
 import com.crvdiag.app.codes.CodesState
 import com.crvdiag.app.codes.CodesViewModel
@@ -44,7 +46,11 @@ class MainActivity : ComponentActivity() {
                 val live: LiveViewModel = viewModel()
                 val logs: LogsViewModel = viewModel()
                 val maintenance: MaintenanceViewModel = viewModel()
-                LaunchedEffect(Unit) { maintenance.observe() }
+                val carTest: CarTestViewModel = viewModel()
+                LaunchedEffect(Unit) {
+                    maintenance.observe()
+                    live.attach(connection) // recordings continue after an automatic reconnect
+                }
                 val liveState by live.state.collectAsState()
                 var current by rememberSaveable { mutableStateOf(Destination.Dashboard) }
                 val link by connection.state.collectAsState()
@@ -80,6 +86,9 @@ class MainActivity : ComponentActivity() {
                         Destination.Live -> LiveDataScreen(connection, live)
                         Destination.Logs -> LogsScreen(logs)
                         Destination.Maintenance -> MaintenanceScreen(maintenance)
+                        Destination.CarTest -> CarTestScreen(carTest) {
+                            carTest.run(connection, liveState.recording != null, maintenance.state.value.odometer)
+                        }
                         Destination.Connection -> ConnectionScreen(connection)
                         Destination.Advanced -> AdvancedScreen(connection)
                     }

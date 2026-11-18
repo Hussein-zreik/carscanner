@@ -43,3 +43,17 @@ val ConsolePolicy: CommandPolicy = com.crvdiag.elm.CompositePolicy(
     com.crvdiag.elm.AdapterCommandPolicy,
     StandardObdReadPolicy,
 )
+
+/**
+ * [ConsolePolicy] that also refuses ANY `ATSH` once the car is known to be on 29-bit CAN.
+ * On 29-bit an 11-bit header such as 7DF turns into a dead address and every request then gets
+ * NO DATA (seen on this car 2026-11-18), so the protocol layer blocks it instead of trusting callers.
+ */
+fun protocolAwareConsolePolicy(protocol: () -> com.crvdiag.elm.ElmProtocol?): CommandPolicy = CommandPolicy { cmd ->
+    val p = protocol()
+    if (cmd.startsWith("ATSH") && p != null && p.isCan && p.functionalHeader11 == null) {
+        Verdict.Refused("ATSH is never sent on this car's 29-bit CAN network: it would break the connection")
+    } else {
+        ConsolePolicy.check(cmd)
+    }
+}

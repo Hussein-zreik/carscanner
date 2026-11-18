@@ -10,7 +10,7 @@ import com.crvdiag.elm.ElmProtocol
 import com.crvdiag.elm.ElmResult
 import com.crvdiag.elm.InitOutcome
 import com.crvdiag.elm.InitReport
-import com.crvdiag.obd.ConsolePolicy
+import com.crvdiag.obd.protocolAwareConsolePolicy
 import com.crvdiag.obd.EcuDiscovery
 import com.crvdiag.obd.EcuInfo
 import com.crvdiag.transport.BluetoothDevices
@@ -23,6 +23,8 @@ import com.crvdiag.transport.TrafficLog.Direction
 import com.crvdiag.transport.Transport
 import com.crvdiag.transport.WifiTcpTransport
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +37,8 @@ sealed interface LinkState {
     data object Disconnected : LinkState
     data class Connecting(val label: String) : LinkState
     data class Connected(val label: String) : LinkState
+    /** The link dropped and the app is reconnecting by itself. */
+    data class Reconnecting(val label: String, val attempt: Int, val maxAttempts: Int) : LinkState
     data class Failed(val message: String) : LinkState
 }
 
@@ -51,7 +55,7 @@ sealed interface CarLinkState {
 
 /**
  * Adapter console. On connect it runs the ELM327 startup ([ElmInitializer]); afterwards raw
- * commands go through the same [Elm327] driver. Every command passes [ConsolePolicy]; every
+ * commands go through the same [Elm327] driver. Every command passes the protocol-aware console allow-list; every
  * byte is recorded in [log] (mirrored to logcat tag "CrvDiag").
  */
 class ConnectionViewModel(application: Application) : AndroidViewModel(application) {
@@ -83,6 +87,8 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
     @Volatile private var transport: Transport? = null
     @Volatile private var elm: Elm327? = null
     @Volatile private var userClosed = false
+    @Volatile private var knownProtocol: ElmProtocol? = null
+    private var reconnectJob: Job? = null
 
     fun refreshPairedDevices() {
         _paired.value = try {
@@ -115,19 +121,26 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
         is SavedLink.Bluetooth -> connectBluetooth(PairedDevice(last.name, last.address))
     }
 
-    private fun connect(label: String, saved: SavedLink, factory: () -> Transport) {
-        if (_state.value is LinkState.Connecting || _state.value is LinkState.Connected) return
+    private fun connect(label: String, saved: SavedLink, attempt: Int = 0, factory: () -> Transport) {
+        if (attempt == 0) {
+            val s = _state.value
+            if (s is LinkState.Connecting || s is LinkState.Connected || s is LinkState.Reconnecting) return
+            userClosed = false
+        }
         val link = LoggingTransport(factory(), log)
         transport = link
-        userClosed = false
-        _state.value = LinkState.Connecting(label)
+        knownProtocol = protocolStore.get()
+        _state.value = if (attempt == 0) LinkState.Connecting(label) else LinkState.Reconnecting(label, attempt, ReconnectPolicy.MAX_ATTEMPTS)
         _carLink.value = CarLinkState.Idle
-        log.add(Direction.INFO, "Connecting: $label")
+        log.add(Direction.INFO, if (attempt == 0) "Connecting: $label" else "Reconnecting ($attempt/${ReconnectPolicy.MAX_ATTEMPTS}): $label")
 
         viewModelScope.launch {
+            var wasReady = false
+            var error: String? = null
             try {
                 link.connect()
-                val driver = Elm327(link, ConsolePolicy) { cmd, reason ->
+                // Protocol-aware allow-list: once the car is known to be 29-bit CAN, ATSH is refused.
+                val driver = Elm327(link, protocolAwareConsolePolicy { knownProtocol }) { cmd, reason ->
                     log.add(Direction.INFO, "REFUSED $cmd: $reason")
                 }
                 driver.start(this)
@@ -138,27 +151,43 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
                 log.add(Direction.INFO, "Connected")
 
                 initialize(driver)
+                wasReady = _carLink.value is CarLinkState.Ready
 
                 driver.closed.await()?.let { throw it }
-                log.add(Direction.INFO, "Link closed")
-                _state.value = LinkState.Disconnected
+                if (!userClosed) error = "The adapter closed the connection"
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (userClosed) {
-                    log.add(Direction.INFO, "Disconnected")
-                    _state.value = LinkState.Disconnected
-                } else {
-                    val msg = e.message ?: e.javaClass.simpleName
-                    log.add(Direction.INFO, "Link error: $msg")
-                    val hint = LinkErrorHints.hintFor(msg)
-                    if (hint != null) log.add(Direction.INFO, "Hint: $hint")
-                    _state.value = LinkState.Failed(hint ?: msg)
-                }
+                if (!userClosed) error = e.message ?: e.javaClass.simpleName
             } finally {
                 elm = null
                 transport = null
                 withContext(NonCancellable) { link.close() }
+            }
+
+            when {
+                userClosed -> {
+                    log.add(Direction.INFO, "Disconnected")
+                    _state.value = LinkState.Disconnected
+                }
+                error == null -> _state.value = LinkState.Disconnected
+                // A link that worked (or a reconnect in progress) dropped: try again by itself.
+                (wasReady || attempt > 0) && attempt < ReconnectPolicy.MAX_ATTEMPTS -> {
+                    log.add(Direction.INFO, "Link lost: $error")
+                    val next = attempt + 1
+                    _state.value = LinkState.Reconnecting(label, next, ReconnectPolicy.MAX_ATTEMPTS)
+                    reconnectJob = viewModelScope.launch {
+                        delay(ReconnectPolicy.delayMs(next))
+                        if (!userClosed) connect(label, saved, next, factory)
+                    }
+                }
+                else -> {
+                    log.add(Direction.INFO, "Link error: $error")
+                    val hint = LinkErrorHints.hintFor(error)
+                    if (hint != null) log.add(Direction.INFO, "Hint: $hint")
+                    val prefix = if (attempt > 0) "Lost the link and couldn't reconnect after $attempt tries. " else ""
+                    _state.value = LinkState.Failed(prefix + (hint ?: error))
+                }
             }
         }
     }
@@ -180,6 +209,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
             is InitOutcome.Success -> {
                 val report = outcome.report
                 val detected = report.detected?.protocol
+                knownProtocol = detected
                 val ecus = EcuDiscovery.fromPid00(report.pid00Lines, if (report.headersOn) detected else null)
                 report.warnings.forEach { log.add(Direction.INFO, "Init warning: $it") }
                 log.add(Direction.INFO, "Init: ${report.adapterId}, ${report.voltage}, protocol ${detected?.code} ${detected?.label}")
@@ -214,8 +244,14 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun disconnect() {
-        val link = transport ?: return
         userClosed = true
+        reconnectJob?.cancel()
+        if (_state.value is LinkState.Reconnecting && transport == null) {
+            log.add(Direction.INFO, "Reconnect cancelled")
+            _state.value = LinkState.Disconnected
+            return
+        }
+        val link = transport ?: return
         viewModelScope.launch { link.close() }
     }
 

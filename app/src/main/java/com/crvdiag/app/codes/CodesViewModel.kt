@@ -5,13 +5,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.crvdiag.app.connection.CarLinkState
 import com.crvdiag.app.report.Block
-import com.crvdiag.app.report.PdfReportWriter
-import com.crvdiag.app.report.ReportFormatter
+import com.crvdiag.app.report.ReportSaver
 import com.crvdiag.app.report.ReportInput
 import com.crvdiag.app.report.ReportType
-import com.crvdiag.data.CrvDatabase
 import com.crvdiag.data.OdometerEstimate
-import com.crvdiag.data.ScanReportEntity
 import com.crvdiag.elm.Elm327
 import com.crvdiag.honda.HondaDtcText
 import com.crvdiag.obd.ClearOutcome
@@ -23,15 +20,12 @@ import com.crvdiag.obd.ScanReportCollector
 import com.crvdiag.transport.TrafficLog
 import com.crvdiag.transport.TrafficLog.Direction
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
 
 sealed interface CodesState {
     data object Idle : CodesState
@@ -127,21 +121,13 @@ class CodesViewModel(application: Application) : AndroidViewModel(application) {
                 val now = ZonedDateTime.now()
                 val input = ReportInput(
                     type = type, notes = notes, createdAt = now,
-                    appVersion = runCatching { app.packageManager.getPackageInfo(app.packageName, 0).versionName }.getOrNull() ?: "?",
+                    appVersion = ReportSaver.appVersion(app),
                     adapterId = ready.report.adapterId, protocolLabel = protocol?.label, voltage = ready.report.voltage,
                     odometerMiles = odometer?.miles, odometerEstimated = odometer?.estimated == true,
                     ecus = ready.ecus, data = data,
                     describeCode = { HondaDtcText.describe(it) ?: DtcText.describe(it) },
                 )
-                val blocks = ReportFormatter.build(input)
-                val file = File(app.filesDir, "reports/report_${type.name}_${STAMP.format(now)}.pdf")
-                withContext(Dispatchers.IO) {
-                    PdfReportWriter.write(blocks, "CR-V Diag · ${type.label} · VIN ${data.vin ?: "not reported"}", file)
-                    CrvDatabase.get(app).scanReportDao().insert(
-                        ScanReportEntity(createdAtEpochMs = now.toInstant().toEpochMilli(), type = type.label, vin = data.vin,
-                            fileName = file.name, summary = ReportFormatter.summary(input)),
-                    )
-                }
+                val (blocks, file) = ReportSaver.save(app, input)
                 log.add(Direction.INFO, "Report: saved ${file.name}")
                 _report.value = ReportState.Done(type, blocks, file)
             } catch (e: CancellationException) {
@@ -155,9 +141,5 @@ class CodesViewModel(application: Application) : AndroidViewModel(application) {
 
     fun dismissReport() {
         if (_report.value !is ReportState.Building) _report.value = ReportState.Idle
-    }
-
-    private companion object {
-        val STAMP: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm")
     }
 }

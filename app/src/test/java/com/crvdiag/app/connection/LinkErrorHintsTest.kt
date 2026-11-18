@@ -19,3 +19,12 @@ class LinkErrorHintsTest {
         assertNull(LinkErrorHints.hintFor("something new"))
     }
 }
+
+class ReconnectPolicyTest {
+    @Test
+    fun `backs off and stays bounded`() {
+        org.junit.jupiter.api.Assertions.assertEquals(listOf(2_000L, 5_000L, 10_000L), (1..3).map(ReconnectPolicy::delayMs))
+        org.junit.jupiter.api.Assertions.assertEquals(10_000L, ReconnectPolicy.delayMs(9))
+        org.junit.jupiter.api.Assertions.assertEquals(3, ReconnectPolicy.MAX_ATTEMPTS)
+    }
+}

@@ -61,6 +61,42 @@ class Can29BitTest {
     }
 
     @Test
+    fun `a dropped reply is retried before saying couldn't read`() = runTest {
+        val fake = FakeCar(car, sequences = mapOf("03" to listOf("NO DATA\r\r", "NO DATA\r\r")))
+        val elm = Elm327(fake, ConsolePolicy).also { it.start(backgroundScope) }
+        val report = DiagnosticsReader(elm, can29, headersOn = true).read()
+        assertEquals(3, fake.sent.count { it == "03" })
+        assertEquals(listOf("P145C"), report.stored["18DAF111"])
+        assertTrue(report.problems.isEmpty())
+    }
+
+    @Test
+    fun `persistent silence is still reported after the retries`() = runTest {
+        val fake = FakeCar(car + ("03" to "NO DATA\r\r"))
+        val elm = Elm327(fake, ConsolePolicy).also { it.start(backgroundScope) }
+        val report = DiagnosticsReader(elm, can29, headersOn = true).read()
+        assertEquals(DiagnosticsReader.READ_ATTEMPTS, fake.sent.count { it == "03" })
+        assertEquals(false, report.storedRead)
+    }
+
+    @Test
+    fun `protocol layer refuses ATSH on 29-bit, even typed in the console`() {
+        val policy29 = protocolAwareConsolePolicy { can29 }
+        assertTrue(policy29.check("ATSH7DF") is com.crvdiag.elm.Verdict.Refused)
+        assertTrue(policy29.check("ATSH7E0") is com.crvdiag.elm.Verdict.Refused)
+        assertEquals(com.crvdiag.elm.Verdict.Allowed, policy29.check("0101"))
+        // Before the protocol is known, and on 11-bit, the approved headers stay allowed.
+        assertEquals(com.crvdiag.elm.Verdict.Allowed, protocolAwareConsolePolicy { null }.check("ATSH7DF"))
+        assertEquals(com.crvdiag.elm.Verdict.Allowed, protocolAwareConsolePolicy { ElmProtocol.CAN_11_500 }.check("ATSH7DF"))
+    }
+
+    @Test
+    fun `VIN from a 29-bit multi-frame reply`() {
+        val lines = listOf("18DAF1111014490201354A36", "18DAF111215245344835 3042", "18DAF111224C30313730 3232")
+        assertEquals("5J6RE4H50BL017022", VehicleInfo.vin(ObdMessages.collect(lines, can29, headersOn = true).single()))
+    }
+
+    @Test
     fun `clearing on 29-bit sends no ATSH`() = runTest {
         val fake = FakeCar(car)
         val elm = Elm327(fake, ConsolePolicy).also { it.start(backgroundScope) }

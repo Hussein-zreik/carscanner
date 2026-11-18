@@ -135,8 +135,9 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
 - Recording: `LiveViewModel` owns polling; it keeps polling off-screen only while recording;
   `RecordingService` only holds foreground status (no work). Recording stops when the link drops.
   Shared drive `.log` files are real recordings → candidates for `testdata/`.
-- Live data (`LiveDataSession`, obd): polls only while the Live screen is open, then restores ATSH7DF;
-  `DiagnosticsReader` also sends ATSH7DF first. `LiveChecks` are guides with explicit conditions.
+- Live data (`LiveDataSession`, obd): polls only while the Live screen is open; on 11-bit CAN it addresses
+  one unit and restores ATSH7DF afterwards, on 29-bit (this car) it never sends ATSH.
+  `DiagnosticsReader` sends ATSH7DF first on 11-bit only. `LiveChecks` are guides with explicit conditions.
 - UI (v0.4.0): landscape, navigation rail (Dashboard, Codes, Live data, Connection, Advanced),
   clean modern dark theme with `Status` colours (ui/theme), shared components (ui/components).
   One activity-scoped `ConnectionViewModel` + `CodesViewModel` shared by all screens; codes are read
@@ -197,6 +198,17 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
     OBDLink app reads codes) gives the exact request bytes. Only those captured, read-codes (and,
     behind confirmation, clear-codes) messages may ever enter the honda allow-lists.
   - Never build SRS/VSA/TPMS requests from guesses, forums or other Honda models.
+- [~] Pre-test hardening (0.9.0, owner request 2026-11-18), code done + tests green, awaiting car:
+  - 29-bit audit: `protocolAwareConsolePolicy` (obd) refuses ANY ATSH once the car is known to be
+    29-bit (protocol layer, also blocks the console); 29-bit tests for codes, VIN multi-frame, live
+    data, clearing; screenshot data uses this car's real IDs.
+  - `DiagnosticsReader` retries 0101/03/07 up to 3× (300 ms apart) on NO DATA/timeout (clone drops).
+  - Automatic reconnect (`ReconnectPolicy`: 3 tries, 2/5/10 s) only after a link that was Ready drops;
+    a recording continues in a new file after reconnect (`LiveViewModel.attach`), service kept alive.
+  - One-tap **Car test** (Dashboard → Run car test): connection, network, codes+readiness, VIN,
+    permanent codes + misfires, 20 s live data, PDF report; ✅/⚠️/❌ per step; results file
+    `reports/car-test_*.txt` (summary lines start with '#', followed by the raw log → valid testdata).
+    `CarTestRunner` is Android-free and tested against 29-bit replay data.
 - Phase 1 status: all six sessions coded; Phase 1 is DONE only after a stable 20-min recorded drive.
 
 ## Notes

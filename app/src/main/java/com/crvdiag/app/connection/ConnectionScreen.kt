@@ -95,7 +95,7 @@ fun ConnectionScreen(vm: ConnectionViewModel) {
         }
     }
 
-    val busy = link is LinkState.Connecting || link is LinkState.Connected
+    val busy = link is LinkState.Connecting || link is LinkState.Connected || link is LinkState.Reconnecting
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(28.dp),
@@ -207,6 +207,7 @@ private fun progressSteps(link: LinkState, carLink: CarLinkState): List<Step> {
         is LinkState.Connecting -> Step("Reach the adapter", "Opening ${link.label.substringBefore(" ·")} link…", Status.Busy)
         is LinkState.Connected -> Step("Reach the adapter", link.label.substringBefore(" ·") + " link open", Status.Ok)
         is LinkState.Failed -> Step("Reach the adapter", "Could not reach it", Status.Fault)
+        is LinkState.Reconnecting -> Step("Reach the adapter", "Link dropped: reconnecting automatically (${link.attempt}/${link.maxAttempts})…", Status.Busy)
         LinkState.Disconnected -> Step("Reach the adapter", null, Status.Neutral)
     }
     val adapterStep = when {

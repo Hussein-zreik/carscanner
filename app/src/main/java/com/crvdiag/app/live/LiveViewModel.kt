@@ -141,12 +141,15 @@ class LiveViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 if (elm.closed.isCompleted) log.add(Direction.INFO, "Live: link closed")
             } finally {
+                // Link lost while recording: save this part, keep the service, resume after reconnect.
+                val linkLost = elm.closed.isCompleted
+                val resume = linkLost && _state.value.recordingRequested
                 withContext(NonCancellable) {
-                    finishRecording(reason = "polling stopped")
-                    session.end()
+                    finishRecording(reason = if (linkLost) "link lost" else "polling stopped", keepService = resume)
+                    if (!linkLost) session.end()
                 }
                 log.add(Direction.INFO, "Live: stopped")
-                _state.update { it.copy(running = false, starting = false, recordingRequested = false) }
+                _state.update { it.copy(running = false, starting = false, recordingRequested = resume) }
             }
         }
     }
@@ -166,8 +169,39 @@ class LiveViewModel(application: Application) : AndroidViewModel(application) {
 
     fun stopRecording() {
         _state.update { it.copy(recordingRequested = false) }
-        viewModelScope.launch { finishRecording(reason = "stopped by user") }
+        viewModelScope.launch {
+            finishRecording(reason = "stopped by user")
+            RecordingService.stop(getApplication()) // also when stopped while reconnecting
+        }
         if (!screenVisible) stop()
+    }
+
+    private var attached = false
+
+    /**
+     * Follows the connection so a recording survives a dropped link: when the car link is Ready
+     * again the recording continues in a new file; if reconnecting fails it ends cleanly.
+     * Runs in viewModelScope, so it also works with the screen off.
+     */
+    fun attach(connection: com.crvdiag.app.connection.ConnectionViewModel) {
+        if (attached) return
+        attached = true
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(connection.state, connection.carLink) { l, c -> l to c }.collect { (l, c) ->
+                if (!_state.value.recordingRequested || job?.isActive == true) return@collect
+                when {
+                    c is CarLinkState.Ready -> {
+                        connection.log.add(Direction.INFO, "Recording: resuming after reconnect (new file)")
+                        start(connection.elmOrNull(), c, connection.log)
+                    }
+                    l is com.crvdiag.app.connection.LinkState.Failed || l is com.crvdiag.app.connection.LinkState.Disconnected -> {
+                        connection.log.add(Direction.INFO, "Recording: stopped, the link could not be restored")
+                        _state.update { it.copy(recordingRequested = false, message = "Recording stopped: the link was lost and couldn't be restored. The saved part is in Logs.") }
+                        RecordingService.stop(getApplication())
+                    }
+                }
+            }
+        }
     }
 
     private suspend fun beginRecording(pids: List<Int>, log: TrafficLog) {
@@ -180,7 +214,7 @@ class LiveViewModel(application: Application) : AndroidViewModel(application) {
         log.add(Direction.INFO, "Recording: started ${r.csvFile.name}")
     }
 
-    private suspend fun finishRecording(reason: String) {
+    private suspend fun finishRecording(reason: String, keepService: Boolean = false) {
         val r = recorder ?: return
         recorder = null
         trafficLog?.let {
@@ -193,8 +227,14 @@ class LiveViewModel(application: Application) : AndroidViewModel(application) {
             r.close()
             id?.let { dao.finish(it, System.currentTimeMillis(), r.rows) }
         }
-        RecordingService.stop(getApplication())
-        _state.update { it.copy(recording = null, message = "Drive log saved (${r.rows} rows). See Logs.") }
+        if (!keepService) RecordingService.stop(getApplication())
+        _state.update {
+            it.copy(
+                recording = null,
+                message = if (keepService) "Link lost: this part is saved (${r.rows} rows). Recording resumes after the reconnect."
+                else "Drive log saved (${r.rows} rows). See Logs.",
+            )
+        }
     }
 
     override fun onCleared() {

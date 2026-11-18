@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Warning
@@ -37,7 +38,7 @@ import com.crvdiag.app.ui.icons.AppIcons
 import com.crvdiag.app.ui.theme.Status
 import com.crvdiag.app.ui.theme.color
 
-enum class Destination(val label: String, val icon: ImageVector) {
+enum class Destination(val label: String, val icon: ImageVector, val inRail: Boolean = true) {
     Dashboard("Dashboard", Icons.Filled.Home),
     Codes("Codes", Icons.Filled.Warning),
     Live("Live data", AppIcons.Gauge),
@@ -45,6 +46,8 @@ enum class Destination(val label: String, val icon: ImageVector) {
     Maintenance("Service", Icons.Filled.DateRange),
     Connection("Connection", AppIcons.Plug),
     Advanced("Advanced", Icons.Filled.Build),
+    /** Opened from the Dashboard's "Run car test" button. */
+    CarTest("Car test", Icons.Filled.CheckCircle, inRail = false),
 }
 
 /** One-word connection state for the narrow rail. */
@@ -76,7 +79,7 @@ fun AppShell(
             },
         ) {
             Spacer(Modifier.height(12.dp))
-            Destination.entries.forEach { d ->
+            Destination.entries.filter { it.inRail }.forEach { d ->
                 NavigationRailItem(
                     selected = d == current,
                     onClick = { onNavigate(d) },

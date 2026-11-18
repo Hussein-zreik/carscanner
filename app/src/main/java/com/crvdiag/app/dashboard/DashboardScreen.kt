@@ -71,6 +71,7 @@ fun DashboardScreen(
         ScreenHeader("CR-V Diag", "2011 Honda CR-V EX · 2.4 L · 4WD · automatic") {
             val (text, status) = linkSummary(link, carLink)
             StatusPill(text, status)
+            Button(onClick = { onNavigate(Destination.CarTest) }) { Text("Run car test") }
         }
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             val tile = Modifier.weight(1f).fillMaxHeight()
@@ -132,6 +133,7 @@ private fun ServiceTile(state: MaintenanceState, onOpen: () -> Unit, modifier: M
 fun linkSummary(link: LinkState, carLink: CarLinkState): Pair<String, Status> = when {
     carLink is CarLinkState.Ready -> "Connected" to Status.Ok
     carLink is CarLinkState.Failed -> "Car not answering" to Status.Fault
+    link is LinkState.Reconnecting -> "Reconnecting…" to Status.Busy
     link is LinkState.Connecting || carLink is CarLinkState.Initializing -> "Connecting…" to Status.Busy
     link is LinkState.Failed -> "Connection failed" to Status.Fault
     else -> "Not connected" to Status.Neutral
@@ -160,12 +162,13 @@ private fun ConnectionTile(
                 carLink is CarLinkState.Failed -> carLink.hint
                 carLink is CarLinkState.Initializing -> carLink.step
                 link is LinkState.Failed -> link.message
+                link is LinkState.Reconnecting -> "The link dropped. Reconnecting by itself (try ${link.attempt} of ${link.maxAttempts})…"
                 else -> "Ignition ON, tablet on the adapter's Wi-Fi, then tap Connect."
             },
         )
         Spacer(Modifier.weight(1f))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val busy = link is LinkState.Connecting || link is LinkState.Connected
+            val busy = link is LinkState.Connecting || link is LinkState.Connected || link is LinkState.Reconnecting
             if (busy) OutlinedButton(onClick = onDisconnect) { Text("Disconnect") }
             else Button(onClick = onConnect) { Text(if (saved is SavedLink.Wifi) "Connect (Wi-Fi)" else "Connect (Bluetooth)") }
             TextButton(onClick = onOptions) { Text("Options") }

@@ -3,6 +3,7 @@ package com.crvdiag.obd
 import com.crvdiag.elm.Elm327
 import com.crvdiag.elm.ElmProtocol
 import com.crvdiag.elm.ElmResult
+import kotlinx.coroutines.delay
 
 data class FreezeFrame(val dtc: String, val values: List<PidValue>)
 
@@ -42,13 +43,22 @@ class DiagnosticsReader(
          * null = no usable answer. On CAN every unit supporting a service answers it (even
          * "0 codes"), so NO DATA means "no answer", never "nothing found".
          */
-        suspend fun messages(cmd: String, what: String, noDataIsProblem: Boolean = true): List<EcuMessage>? =
-            when (val r = elm.execute(cmd)) {
+        suspend fun messages(cmd: String, what: String, noDataIsProblem: Boolean = true): List<EcuMessage>? {
+            // The clone drops replies (seen on this car): retry an important read before giving up.
+            var r = elm.execute(cmd)
+            var attempt = 1
+            while (noDataIsProblem && attempt < READ_ATTEMPTS && (r == ElmResult.NoData || r == ElmResult.Timeout)) {
+                delay(RETRY_PAUSE_MS)
+                r = elm.execute(cmd)
+                attempt++
+            }
+            return when (r) {
                 is ElmResult.Ok -> ObdMessages.collect(r.lines, protocol, headersOn)
                 ElmResult.NoData -> if (noDataIsProblem) null.also { problems += "$what: no answer from the car" } else emptyList()
                 ElmResult.Timeout -> null.also { problems += "$what: no reply (timeout)" }
                 is ElmResult.Error -> null.also { problems += "$what: ${r.message}" }
             }
+        }
 
         // 11-bit CAN: live data may have addressed one unit; talk to all of them again.
         // 29-bit CAN: the header is never changed (see ElmProtocol.functionalHeader11).
@@ -97,6 +107,10 @@ class DiagnosticsReader(
     }
 
     companion object {
+        /** Attempts for readiness / stored / pending codes before reporting "couldn't read". */
+        const val READ_ATTEMPTS = 3
+        const val RETRY_PAUSE_MS = 300L
+
         val FREEZE_FRAME_PIDS = listOf(0x03, 0x04, 0x05, 0x06, 0x07, 0x0B, 0x0C, 0x0D, 0x0F, 0x11)
     }
 }
