@@ -38,6 +38,11 @@ import com.crvdiag.app.maintenance.MaintenanceScreen
 import com.crvdiag.app.misfire.IdleTestState
 import com.crvdiag.app.misfire.MisfireScreen
 import com.crvdiag.app.misfire.MisfireViewModel
+import com.crvdiag.app.tests.GuidedState
+import com.crvdiag.app.tests.GuidedTestScreen
+import com.crvdiag.app.tests.TestKind
+import com.crvdiag.app.tests.TestsHubScreen
+import com.crvdiag.app.tests.TestsViewModel
 import com.crvdiag.app.maintenance.MaintenanceViewModel
 import com.crvdiag.app.recording.LogsScreen
 import com.crvdiag.app.recording.LogsViewModel
@@ -267,7 +272,41 @@ class ScreenshotTest {
             listOf(-8.5), -4.0, 88.0, emptyList())
         vm.showPreview(IdleTestState(newMisfires = verdict.newMisfires, verdict = verdict),
             DriveLogEntity(3, 0, 1, "a.csv", "a.log", 4800, "Misfires during drive: cyl 1: 0 · cyl 2: 0 · cyl 3: 2 · cyl 4: 0"))
-        shoot("14-misfire", Destination.Misfire) { MisfireScreen(vm, connected = true, onStart = {}, onOpenLive = {}) }
+        shoot("14-misfire", Destination.Tests) { MisfireScreen(vm, connected = true, onStart = {}, onOpenLive = {}) }
+    }
+
+    @Test fun testsHub() {
+        connected()
+        shoot("15-tests-hub", Destination.Tests) { TestsHubScreen({}, {}) }
+    }
+
+    @Test fun batteryTest() {
+        connected()
+        val vm = TestsViewModel(ApplicationProvider.getApplicationContext())
+        // SYNTHETIC: this car's low key-on reading, a borderline crank, Honda-style low idle charge.
+        val verdict = com.crvdiag.obd.BatteryAnalysis.evaluate(List(5) { 12.15 }, false, listOf(12.1, 9.9, 9.8, 11.2, 13.1),
+            List(10) { 13.1 }, List(10) { 14.0 }, 2450.0)
+        vm.showPreview(GuidedState(kind = TestKind.Battery, doneSteps = 4, verdict = verdict))
+        shoot("16-battery-test", Destination.Tests) { GuidedTestScreen(TestKind.Battery, vm, {}, {}) }
+    }
+
+    @Test fun selfTests() {
+        connected()
+        val vm = TestsViewModel(ApplicationProvider.getApplicationContext())
+        val monitors = listOf(
+            com.crvdiag.obd.MonitorResults(0x01, listOf(com.crvdiag.obd.MonitorTest(0x01, 0x87, 0x01, 38, 0, 250))),
+            com.crvdiag.obd.MonitorResults(0x02, listOf(com.crvdiag.obd.MonitorTest(0x02, 0x9A, 0x0B, 104, 0, 1270))),
+            com.crvdiag.obd.MonitorResults(0x21, listOf(com.crvdiag.obd.MonitorTest(0x21, 0xA1, 0x0B, 0, 0, 0))),
+            com.crvdiag.obd.MonitorResults(0x3D, listOf(com.crvdiag.obd.MonitorTest(0x3D, 0xB9, 0x30, 0, 0, 0))),
+        )
+        val readiness = Readiness.decode(0x00, 0x07, 0xE5, 0xA5)
+        val f = listOf(
+            com.crvdiag.obd.DiagFinding("Stored self-tests", com.crvdiag.obd.Finding.Good, "2 passed, 2 not run yet."),
+            com.crvdiag.obd.DiagFinding("Catalytic converter self-test", com.crvdiag.obd.Finding.Info, "Not run yet since the codes were cleared."),
+        ) + readiness.incomplete.map { com.crvdiag.obd.DiagFinding("To finish: ${it.name}", com.crvdiag.obd.Finding.Info, com.crvdiag.obd.Mode06Catalog.driveCycleTip(it.name)) }
+        vm.showPreview(GuidedState(kind = TestKind.SelfTests, doneSteps = 2, selfTests = monitors, readiness = readiness,
+            verdict = com.crvdiag.obd.TestVerdict("4 self-test(s) still to finish", f, pending = true)))
+        shoot("17-self-tests", Destination.Tests) { GuidedTestScreen(TestKind.SelfTests, vm, {}, {}) }
     }
 
     @Test fun maintenance() {

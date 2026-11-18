@@ -42,7 +42,7 @@ import com.crvdiag.app.ui.theme.color
 import com.crvdiag.obd.Finding
 
 @Composable
-fun MisfireScreen(vm: MisfireViewModel, connected: Boolean, onStart: () -> Unit, onOpenLive: () -> Unit) {
+fun MisfireScreen(vm: MisfireViewModel, connected: Boolean, onStart: () -> Unit, onOpenLive: () -> Unit, onBack: () -> Unit = {}) {
     val s by vm.state.collectAsState()
     val drive by vm.lastDrive.collectAsState()
     LaunchedEffect(Unit) { vm.observeDrives() }
@@ -52,6 +52,7 @@ fun MisfireScreen(vm: MisfireViewModel, connected: Boolean, onStart: () -> Unit,
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         ScreenHeader("Misfire check", "Is the rough idle a misfire, and which cylinder? A guide, not a diagnosis.") {
+            TextButton(onClick = onBack) { Text("All tests") }
             if (s.running) OutlinedButton(onClick = vm::stop) { Text("Stop test") }
             else Button(onClick = onStart, enabled = connected) { Text(if (s.verdict != null) "Run again" else "Start idle test") }
         }

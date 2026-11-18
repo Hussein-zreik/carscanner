@@ -44,12 +44,12 @@ class MisfireReader(
 
 enum class Finding { Good, Watch, Info }
 
-data class MisfireFinding(val title: String, val level: Finding, val detail: String)
+data class DiagFinding(val title: String, val level: Finding, val detail: String)
 
 data class MisfireVerdict(
     /** New misfires per cylinder between the two snapshots (null = not reported). */
     val newMisfires: Map<Int, Int?>,
-    val findings: List<MisfireFinding>,
+    val findings: List<DiagFinding>,
     /** One-line headline for the result card. */
     val headline: String,
 )
@@ -82,44 +82,44 @@ object MisfireAnalysis {
         misfireCodes: List<String>,
     ): MisfireVerdict {
         val fresh = newMisfires(before, after)
-        val findings = mutableListOf<MisfireFinding>()
+        val findings = mutableListOf<DiagFinding>()
         val counted = fresh.filterValues { it != null }.mapValues { it.value!! }
         val total = counted.values.sum()
         val hit = counted.filterValues { it > 0 }.keys.sorted()
 
         if (coolant != null && coolant < 75) {
-            findings += MisfireFinding("Engine not warm yet", Finding.Info,
+            findings += DiagFinding("Engine not warm yet", Finding.Info,
                 "Coolant ${coolant.toInt()} °C. A cold engine idles faster and less smoothly; repeat once it's above 80 °C.")
         }
         if (misfireCodes.isNotEmpty()) {
-            findings += MisfireFinding("Misfire codes stored", Finding.Watch,
+            findings += DiagFinding("Misfire codes stored", Finding.Watch,
                 "${misfireCodes.joinToString()}: the engine computer itself has confirmed misfires.")
         }
 
         // Misfire counters
         val countersMoved = (1..4).any { c -> after.current[c] != null && after.current[c] != before.current[c] }
         when {
-            counted.isEmpty() -> findings += MisfireFinding("Misfire counters", Finding.Info,
+            counted.isEmpty() -> findings += DiagFinding("Misfire counters", Finding.Info,
                 "The engine computer didn't report misfire counters (service 06). Use the codes and readings below instead.")
-            hit.size == 1 -> findings += MisfireFinding("Misfire on cylinder ${hit.first()}", Finding.Watch,
+            hit.size == 1 -> findings += DiagFinding("Misfire on cylinder ${hit.first()}", Finding.Watch,
                 "${counted[hit.first()]} misfire(s) during the test, other cylinders clean. One cylinder points to its " +
                     "ignition coil, spark plug or injector. Classic test: swap that coil with a neighbouring cylinder and " +
                     "see if the misfire moves with it.")
-            hit.size >= 2 -> findings += MisfireFinding("Misfires on cylinders ${hit.joinToString()}", Finding.Watch,
+            hit.size >= 2 -> findings += DiagFinding("Misfires on cylinders ${hit.joinToString()}", Finding.Watch,
                 "$total misfire(s) spread over several cylinders. Something shared by all cylinders is more likely than " +
                     "one coil: air leak, fuel pressure, or a stuck-open EVAP purge valve (see fuel trims).")
-            !countersMoved && rpm.size >= 20 -> findings += MisfireFinding("No new misfires counted", Finding.Good,
+            !countersMoved && rpm.size >= 20 -> findings += DiagFinding("No new misfires counted", Finding.Good,
                 "The counters didn't change. Either there were no misfires, or this engine computer only updates them " +
                     "at the end of a drive: confirm with the drive watch (record a drive).")
-            else -> findings += MisfireFinding("No misfires during the test", Finding.Good, "All four cylinders: 0 new misfires.")
+            else -> findings += DiagFinding("No misfires during the test", Finding.Good, "All four cylinders: 0 new misfires.")
         }
 
         // Idle steadiness
         val sd = if (rpm.size >= 10) stdDev(rpm) else null
         if (sd != null) {
-            findings += if (sd > UNSTEADY_RPM_SD) MisfireFinding("Idle speed is unsteady", Finding.Watch,
+            findings += if (sd > UNSTEADY_RPM_SD) DiagFinding("Idle speed is unsteady", Finding.Watch,
                 "RPM varies ±${sd.toInt()} around ${rpm.average().toInt()} rpm. A healthy warm idle is usually within about ±25 rpm.")
-            else MisfireFinding("Idle speed is steady", Finding.Good, "RPM varies only ±${sd.toInt()} around ${rpm.average().toInt()} rpm.")
+            else DiagFinding("Idle speed is steady", Finding.Good, "RPM varies only ±${sd.toInt()} around ${rpm.average().toInt()} rpm.")
         }
 
         // Fuel mixture
@@ -127,13 +127,13 @@ object MisfireAnalysis {
         if (st != null && longTrim != null) {
             val trim = st + longTrim
             findings += when {
-                trim < -TRIM_LIMIT -> MisfireFinding("Engine running rich", Finding.Watch,
+                trim < -TRIM_LIMIT -> DiagFinding("Engine running rich", Finding.Watch,
                     "Fuel trims ${fmt(trim)} %: the computer is removing fuel. On this car a stuck-open EVAP purge valve " +
                         "(your P145C is about purge flow) is a common cause of a rich, rough idle, especially after refuelling.")
-                trim > TRIM_LIMIT -> MisfireFinding("Engine running lean", Finding.Watch,
+                trim > TRIM_LIMIT -> DiagFinding("Engine running lean", Finding.Watch,
                     "Fuel trims +${fmt(trim)} %: the computer is adding fuel. Common causes: a vacuum/air leak (hoses, intake " +
                         "gasket, PCV) or weak fuel delivery.")
-                else -> MisfireFinding("Fuel mixture normal", Finding.Good, "Fuel trims ${fmt(trim)} % (within ±10 %).")
+                else -> DiagFinding("Fuel mixture normal", Finding.Good, "Fuel trims ${fmt(trim)} % (within ±10 %).")
             }
         }
 
@@ -141,7 +141,7 @@ object MisfireAnalysis {
         val smooth = (sd == null || sd <= UNSTEADY_RPM_SD) && total == 0 && misfireCodes.isEmpty()
         val mixtureOk = st == null || longTrim == null || kotlin.math.abs(st + longTrim) <= TRIM_LIMIT
         if (smooth && mixtureOk && counted.isNotEmpty()) {
-            findings += MisfireFinding("If it still feels shaky", Finding.Info,
+            findings += DiagFinding("If it still feels shaky", Finding.Info,
                 "The engine data looks smooth. A vibration you feel with smooth data is often worn engine or transmission " +
                     "mounts (common on this CR-V generation), usually worse in Drive at a stop. A shop can check them visually.")
         }

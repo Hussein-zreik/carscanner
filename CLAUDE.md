@@ -219,6 +219,17 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
     `drive_logs.misfireSummary` (DB v5, auto-migration 4→5) and shown in Logs + Misfire screen.
   - Unknown: whether this Honda updates mode 06 counters during a cycle or only at its end; the screen
     says so if counters don't move. Verify on the car.
+- [~] Guided car tests (0.11.0, owner request 2026-11-18: "features for the car scan"), code done + tests green:
+  Tests hub in the rail (replaces the Misfire item; misfire check lives inside it):
+  - Battery & charging: rest (ignition state detected via a single 0100), cranking minimum (fast ATRV),
+    idle and loaded charging; Honda controlled alternator → ~13 V at idle is Info, the loaded step decides.
+  - Fuel / vacuum leak: trims at warm idle vs ~2,500 rpm (vacuum leak / fuel delivery-MAF / rich patterns).
+  - EVAP purge (P145C): 3-min warm idle watching PID 2E (if supported) vs STFT + mode 06 MID 3D result;
+    observation only, shop confirms (smoke/vacuum test).
+  - Self-tests & catalyst: all supported mode 06 MIDs (`SelfTestReader`, 0600/0620… discovery), pass /
+    FAILED / not run yet (all-zero, min>max, 0x5555 as seen on this car), catalyst MID 21 + downstream O2,
+    drive-cycle tips per incomplete monitor (general guidance, not Honda's exact procedure).
+  - All read-only (01/06/ATRV only), parked only (abort > 5 km/h). Thresholds are guide values.
 - Phase 1 status: all six sessions coded; Phase 1 is DONE only after a stable 20-min recorded drive.
 
 ## Notes

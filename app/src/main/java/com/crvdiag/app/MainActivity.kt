@@ -27,6 +27,10 @@ import com.crvdiag.app.dashboard.linkSummary
 import com.crvdiag.app.live.LiveDataScreen
 import com.crvdiag.app.misfire.MisfireScreen
 import com.crvdiag.app.misfire.MisfireViewModel
+import com.crvdiag.app.tests.GuidedTestScreen
+import com.crvdiag.app.tests.TestKind
+import com.crvdiag.app.tests.TestsHubScreen
+import com.crvdiag.app.tests.TestsViewModel
 import com.crvdiag.app.live.LiveViewModel
 import com.crvdiag.app.maintenance.MaintenanceScreen
 import com.crvdiag.app.maintenance.MaintenanceViewModel
@@ -50,6 +54,9 @@ class MainActivity : ComponentActivity() {
                 val maintenance: MaintenanceViewModel = viewModel()
                 val carTest: CarTestViewModel = viewModel()
                 val misfire: MisfireViewModel = viewModel()
+                val tests: TestsViewModel = viewModel()
+                // Which test is open inside the Tests hub: null = list, "misfire" or a TestKind name.
+                var openTest by rememberSaveable { mutableStateOf<String?>(null) }
                 LaunchedEffect(Unit) {
                     maintenance.observe()
                     live.attach(connection) // recordings continue after an automatic reconnect
@@ -87,16 +94,26 @@ class MainActivity : ComponentActivity() {
                             CodesScreen(connection, codes, service.odometer, onOpenConnection = { current = Destination.Connection })
                         }
                         Destination.Live -> LiveDataScreen(connection, live)
-                        Destination.Misfire -> MisfireScreen(
-                            misfire, connected = carLink is CarLinkState.Ready,
-                            onStart = {
-                                val report = (codes.state.value as? CodesState.Done)?.report
-                                val known = report?.let { it.stored.values.flatten() + it.pending.values.flatten() }.orEmpty()
-                                misfire.start(connection.elmOrNull(), carLink, connection.log,
-                                    com.crvdiag.obd.MisfireAnalysis.misfireCodesIn(known), liveState.recording != null)
-                            },
-                            onOpenLive = { current = Destination.Live },
-                        )
+                        Destination.Tests -> when (val t = openTest) {
+                            null -> TestsHubScreen(onOpenMisfire = { openTest = "misfire" }, onOpen = { openTest = it.name })
+                            "misfire" -> MisfireScreen(
+                                misfire, connected = carLink is CarLinkState.Ready,
+                                onStart = {
+                                    val report = (codes.state.value as? CodesState.Done)?.report
+                                    val known = report?.let { it.stored.values.flatten() + it.pending.values.flatten() }.orEmpty()
+                                    misfire.start(connection.elmOrNull(), carLink, connection.log,
+                                        com.crvdiag.obd.MisfireAnalysis.misfireCodesIn(known), liveState.recording != null)
+                                },
+                                onOpenLive = { current = Destination.Live },
+                                onBack = { openTest = null },
+                            )
+                            else -> {
+                                val kind = TestKind.valueOf(t)
+                                GuidedTestScreen(kind, tests,
+                                    onStart = { tests.start(kind, connection, liveState.recording != null) },
+                                    onBack = { openTest = null })
+                            }
+                        }
                         Destination.Logs -> LogsScreen(logs)
                         Destination.Maintenance -> MaintenanceScreen(maintenance)
                         Destination.CarTest -> CarTestScreen(carTest) {
