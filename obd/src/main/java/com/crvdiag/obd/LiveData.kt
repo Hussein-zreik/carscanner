@@ -96,7 +96,7 @@ class LiveDataSession(
 
     /** Payload from the target unit (or the largest reply when units can't be told apart). */
     private suspend fun reply(cmd: String): List<Int>? {
-        val r = elm.execute(cmd, timeoutMs = 1_500, retries = 0) as? ElmResult.Ok ?: return null
+        val r = elm.obdRequest(cmd, protocol, headersOn, timeoutMs = 1_500, retries = 0) as? ElmResult.Ok ?: return null
         val messages = ObdMessages.collect(r.lines, protocol, headersOn)
         val expected = requestId?.let { EcuDiscovery.responseIdFor(it) }
         return (messages.firstOrNull { it.ecu == expected } ?: messages.maxByOrNull { it.payload.size })?.payload

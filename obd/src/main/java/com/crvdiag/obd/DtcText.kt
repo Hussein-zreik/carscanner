@@ -54,6 +54,8 @@ object DtcText {
         "P0455" to "EVAP system large leak",
         "P0456" to "EVAP system very small leak",
         "P0457" to "EVAP leak detected (fuel cap loose/off)",
+        "P0496" to "EVAP system high purge flow",
+        "P0497" to "EVAP system low purge flow",
         "P0500" to "Vehicle speed sensor A",
         "P0505" to "Idle control system",
         "P0562" to "System voltage low",

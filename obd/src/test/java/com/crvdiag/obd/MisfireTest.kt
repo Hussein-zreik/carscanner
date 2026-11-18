@@ -78,6 +78,7 @@ class MisfireTest {
         val s = MisfireReader(elm, ElmProtocol.CAN_29_500, headersOn = true, engineResponseId = "18DAF111", clock = { 5L }).read()
         assertEquals(mapOf(1 to 0, 2 to 7, 3 to null, 4 to 0), s.current)
         assertEquals(2, s.average10[2])
-        assertEquals(listOf("06A2", "06A3", "06A4", "06A5"), car.sent)
+        // A dropped cylinder is asked up to 3 times (the clone drops replies), then reported unknown.
+        assertEquals(listOf("06A2", "06A3", "06A4", "06A4", "06A4", "06A5"), car.sent)
     }
 }

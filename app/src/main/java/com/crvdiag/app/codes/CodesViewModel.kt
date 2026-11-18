@@ -85,7 +85,9 @@ class CodesViewModel(application: Application) : AndroidViewModel(application) {
             log.add(Direction.INFO, "Clear codes: confirmed by user")
             val outcome = CodeClearer(elm, ready.report.detected?.protocol, ready.report.headersOn).clear()
             val message = when (outcome) {
-                is ClearOutcome.Cleared -> "Codes cleared by ${outcome.ecus.joinToString()}." +
+                is ClearOutcome.Cleared -> (if (outcome.confirmedByReread) "Codes cleared: the car answered 'busy, wait', " +
+                    "then a new read showed the check-engine light off and 0 stored codes."
+                else "Codes cleared by ${outcome.ecus.joinToString()}.") +
                     outcome.rejected.entries.joinToString("") { " ${it.key} refused: ${it.value}." }
                 is ClearOutcome.Refused -> "Not cleared: ${outcome.reason}"
                 is ClearOutcome.Failed -> "Clear failed: ${outcome.reason}"

@@ -44,6 +44,9 @@ data class ReportInput(
 
 /** Builds the scan report. Systems that were not scanned are always listed as NOT SCANNED. */
 object ReportFormatter {
+    /** K24Z6: 4 cylinders (mode 06 MIDs A2–A5). */
+    private const val CYLINDERS = 4
+
     private val WHEN: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy, HH:mm")
 
     fun summary(input: ReportInput): String {
@@ -158,9 +161,15 @@ object ReportFormatter {
             blocks += Block.Heading("Misfire counters (engine self-test results)")
             blocks += Block.Table(
                 listOf("Cylinder", "This drive", "Average, last 10 drives"),
-                input.data.misfires.map { m ->
-                    val bad = (m.thisCycle ?: 0) > 0 || (m.average10Cycles ?: 0) > 0
-                    Row(listOf("${m.cylinder}", m.thisCycle?.toString() ?: "—", m.average10Cycles?.toString() ?: "—"), if (bad) Tone.Warn else Tone.Good)
+                // Every cylinder is listed: one the adapter didn't deliver says so instead of vanishing.
+                (1..CYLINDERS).map { cyl ->
+                    val m = input.data.misfires.firstOrNull { it.cylinder == cyl }
+                    if (m == null) {
+                        Row(listOf("$cyl", "not read", "not read"), Tone.Muted)
+                    } else {
+                        val bad = (m.thisCycle ?: 0) > 0 || (m.average10Cycles ?: 0) > 0
+                        Row(listOf("$cyl", m.thisCycle?.toString() ?: "—", m.average10Cycles?.toString() ?: "—"), if (bad) Tone.Warn else Tone.Good)
+                    }
                 },
                 listOf(0.3f, 0.3f, 0.4f),
             )

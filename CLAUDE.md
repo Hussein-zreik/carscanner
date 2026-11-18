@@ -230,6 +230,22 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
     FAILED / not run yet (all-zero, min>max, 0x5555 as seen on this car), catalyst MID 21 + downstream O2,
     drive-cycle tips per incomplete monitor (general guidance, not Honda's exact procedure).
   - All read-only (01/06/ATRV only), parked only (abort > 5 km/h). Thresholds are guide values.
+- [x] **First full car session with 0.11.0 (2026-11-18 evening)**, log `testdata/2026-11-18_wifi_29bit-late-replies.log`:
+  29-bit codes now read correctly (P0497 + P145C), PDF reports generate on the tablet, readiness/permanent
+  codes/VIN/mode 06 work, recording + reconnect work. Problems found → fixed in 0.12.0 (code done, 213 tests green,
+  **awaiting car retest**):
+  - **Late replies:** the clone answers NO DATA early and prints the real answer after its prompt; the app took it
+    as the answer to the next request (live data one step behind, fuel test "not enough data"). Now every OBD
+    request goes through `obdRequest`/`obdRead` (obd, `ObdRequest.kt`): `ObdReplyMatch` keeps only lines whose
+    service (+0x40) and PID/MID/info type match; `Elm327.execute(filter = …)` skips non-matching replies and gives
+    a late answer 300 ms grace after NO DATA or "?". AT commands / console are unfiltered.
+  - **Clear codes:** both units answered 7F 04 78 (NRC 0x78 = response pending, not a refusal); the clear had worked.
+    `CodeClearer` now confirms by re-reading 0101 (MIL off, 0 codes) → `Cleared(confirmedByReread = true)`.
+    04 is still sent once, never retried.
+  - **Dropped multi-frame / mode 06 replies:** VIN (first frame only) and misfire MIDs are retried up to 3×
+    (`obdRead`); the report lists all 4 cylinders ("not read" instead of missing rows).
+  - Junk after the prompt (tails of earlier replies) comes from the clone's Wi-Fi bridge, not the app.
+  - Wi-Fi link dropped ("Software caused connection abort") every 1–2 min; automatic reconnect recovered most times.
 - Phase 1 status: all six sessions coded; Phase 1 is DONE only after a stable 20-min recorded drive.
 
 ## Notes
@@ -250,5 +266,11 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
   cylinders. Candidates: misfire, EVAP purge valve stuck open (P145C), vacuum leak, worn mounts.
 - Battery (ATRV, engine off, ignition on, 2026-11-17): 12.1 V → 11.8 V. Recheck resting (≥12.4 V)
   and running (13.7–14.7 V) voltage.
+- **Car findings 2026-11-18 evening (CR-V Diag 0.11.0, warm idle):** P0497 (EVAP low purge flow, SAE) + P145C were
+  pending at 21:22, then STORED with MIL ON at 21:55; owner cleared them at 22:03 (worked) → both remain as
+  PERMANENT codes until the EVAP monitor passes. Mode 06: **cylinder 3** misfires 9 this cycle / 5 average (others
+  0–1) → leading explanation for the rough idle (below the P0303 threshold). Idle 640–705 rpm, coolant 96–97 °C,
+  MAP 33 kPa, MAF ~3.2 g/s, STFT −3…+2 %, LTFT −4…−6 % (idle and ~2,450 rpm) → no vacuum leak / fuel-delivery sign.
+  Battery 11.9 V before start (weak/discharged), 13.6–14.1 V running (charging OK).
 - Car history: salvage-titled 2017 (front-end), repaired 2018; odometer branded "not actual" — the
   maintenance tracker uses the owner's own readings from 2018 onward.

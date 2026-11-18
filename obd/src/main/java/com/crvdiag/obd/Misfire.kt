@@ -30,11 +30,12 @@ class MisfireReader(
         val avg = mutableMapOf<Int, Int?>()
         for ((i, mid) in Mode06.MISFIRE_MIDS.withIndex()) {
             val cylinder = i + 1
-            val tests = (elm.execute("06%02X".format(mid)) as? ElmResult.Ok)?.let { r ->
-                val msgs = ObdMessages.collect(r.lines, protocol, headersOn)
+            fun engineTests(msgs: List<EcuMessage>) =
                 (msgs.firstOrNull { it.ecu == engineResponseId } ?: msgs.maxByOrNull { it.payload.size })
                     ?.let(Mode06::parse).orEmpty().filter { it.mid == mid }
-            }.orEmpty()
+            // The clone drops some of these replies (cylinders missing on 2026-11-18): retry.
+            val (_, msgs) = elm.obdRead("06%02X".format(mid), protocol, headersOn) { engineTests(it).isNotEmpty() }
+            val tests = engineTests(msgs)
             current[cylinder] = tests.firstOrNull { it.tid == Mode06.TID_MISFIRE_THIS_CYCLE }?.value
             avg[cylinder] = tests.firstOrNull { it.tid == Mode06.TID_MISFIRE_EWMA_10_CYCLES }?.value
         }

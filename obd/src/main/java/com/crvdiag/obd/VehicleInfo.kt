@@ -97,28 +97,37 @@ class ScanReportCollector(
         val diagnostics = DiagnosticsReader(elm, protocol, headersOn).read(onStep)
         val problems = diagnostics.problems.toMutableList()
 
-        suspend fun messages(cmd: String, what: String): List<EcuMessage> =
-            when (val r = elm.execute(cmd)) {
-                is com.crvdiag.elm.ElmResult.Ok -> ObdMessages.collect(r.lines, protocol, headersOn)
-                com.crvdiag.elm.ElmResult.NoData -> emptyList() // optional items (VIN, CAL ID, mode 06 MIDs)
-                com.crvdiag.elm.ElmResult.Timeout -> emptyList<EcuMessage>().also { problems += "$what: no reply (timeout)" }
-                is com.crvdiag.elm.ElmResult.Error -> emptyList<EcuMessage>().also { problems += "$what: ${r.message}" }
+        /** Retried until [complete]: the clone drops replies or multi-frame parts (VIN, 2026-11-18). */
+        suspend fun messages(
+            cmd: String,
+            what: String,
+            attempts: Int = 3,
+            complete: (List<EcuMessage>) -> Boolean = { it.isNotEmpty() },
+        ): List<EcuMessage> {
+            val (r, msgs) = elm.obdRead(cmd, protocol, headersOn, attempts, complete = complete)
+            when (r) {
+                com.crvdiag.elm.ElmResult.Timeout -> if (msgs.isEmpty()) problems += "$what: no reply (timeout)"
+                is com.crvdiag.elm.ElmResult.Error -> problems += "$what: ${r.message}"
+                else -> Unit // NO DATA: optional items (VIN, CAL ID, mode 06 MIDs)
             }
+            return msgs
+        }
 
         onStep("Permanent codes (0A)")
         val permanent = messages("0A", "Permanent codes").mapNotNull { m -> Dtcs.fromMessage(m, 0x4A)?.let { m.ecu to it } }.toMap()
         if (permanent.isEmpty()) problems += "Permanent codes: no usable answer (older units may not support them)"
         onStep("VIN (0902)")
-        val vin = messages("0902", "VIN").firstNotNullOfOrNull(VehicleInfo::vin)
+        val vin = messages("0902", "VIN") { m -> m.any { VehicleInfo.vin(it) != null } }.firstNotNullOfOrNull(VehicleInfo::vin)
         onStep("Calibration IDs (0904)")
-        val cal = messages("0904", "Calibration IDs").associate { it.ecu to VehicleInfo.calibrationIds(it) }.filterValues { it.isNotEmpty() }
+        val cal = messages("0904", "Calibration IDs", attempts = 2).associate { it.ecu to VehicleInfo.calibrationIds(it) }.filterValues { it.isNotEmpty() }
         onStep("Module names (090A)")
-        val names = messages("090A", "Module names").mapNotNull { m -> VehicleInfo.ecuName(m)?.let { m.ecu to it } }.toMap()
+        val names = messages("090A", "Module names", attempts = 2).mapNotNull { m -> VehicleInfo.ecuName(m)?.let { m.ecu to it } }.toMap()
 
         val misfires = mutableListOf<MisfireCount>()
         for ((i, mid) in Mode06.MISFIRE_MIDS.withIndex()) {
             onStep("Misfire counter cylinder ${i + 1} (06%02X)".format(mid))
-            val tests = messages("06%02X".format(mid), "Misfire cylinder ${i + 1}").flatMap { Mode06.parse(it).orEmpty() }.filter { it.mid == mid }
+            fun misfireTests(m: List<EcuMessage>) = m.flatMap { Mode06.parse(it).orEmpty() }.filter { it.mid == mid }
+            val tests = misfireTests(messages("06%02X".format(mid), "Misfire cylinder ${i + 1}") { misfireTests(it).isNotEmpty() })
             if (tests.isNotEmpty()) {
                 misfires += MisfireCount(
                     i + 1,

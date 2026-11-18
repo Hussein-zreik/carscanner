@@ -58,13 +58,14 @@ class Elm327(
         timeoutMs: Long = DEFAULT_TIMEOUT_MS,
         retries: Int = 1,
         policy: CommandPolicy? = null,
+        filter: ReplyFilter? = null,
     ): ElmResult = lock.withLock {
         val guard = policy?.let { GuardedSender(transport, it, onRefused) } ?: sender
-        var result = executeOnce(guard, command, timeoutMs)
+        var result = executeOnce(guard, command, timeoutMs, filter)
         var attempt = 0
         while (result is ElmResult.Timeout && attempt < retries) {
             attempt++
-            result = executeOnce(guard, command, timeoutMs)
+            result = executeOnce(guard, command, timeoutMs, filter)
         }
         result
     }
@@ -74,7 +75,12 @@ class Elm327(
         data object LinkClosed : Outcome
     }
 
-    private suspend fun executeOnce(guard: GuardedSender, command: String, timeoutMs: Long): ElmResult {
+    private suspend fun executeOnce(
+        guard: GuardedSender,
+        command: String,
+        timeoutMs: Long,
+        filter: ReplyFilter?,
+    ): ElmResult {
         // Discard anything left over (e.g. a late reply to a command that timed out).
         while (chunks.tryReceive().isSuccess) {
             // discard
@@ -92,22 +98,60 @@ class Elm327(
         }
 
         val framer = PromptFramer()
-        val outcome = withTimeoutOrNull(timeoutMs) {
-            var result: Outcome? = null
-            while (result == null) {
-                val chunk = chunks.receiveCatching().getOrNull()
-                result = if (chunk == null) Outcome.LinkClosed else framer.append(chunk)?.let(Outcome::Frame)
+
+        /** Next complete reply: one already buffered in the framer, else read more chunks. */
+        suspend fun nextFrame(): Outcome {
+            framer.append("")?.let { return Outcome.Frame(it) }
+            while (true) {
+                val chunk = chunks.receiveCatching().getOrNull() ?: return Outcome.LinkClosed
+                framer.append(chunk)?.let { return Outcome.Frame(it) }
             }
-            result
         }
-        return when (outcome) {
-            null -> ElmResult.Timeout
-            Outcome.LinkClosed -> ElmResult.Error("Link closed")
-            is Outcome.Frame -> ElmResponseParser.parse(command, outcome.text)
+
+        // Without a filter the first reply is the answer (AT commands, raw console).
+        if (filter == null) {
+            return when (val outcome = withTimeoutOrNull(timeoutMs) { nextFrame() }) {
+                null -> ElmResult.Timeout
+                Outcome.LinkClosed -> ElmResult.Error("Link closed")
+                is Outcome.Frame -> ElmResponseParser.parse(command, outcome.text)
+            }
         }
+
+        // With a filter: the V03H4 clone sometimes answers "NO DATA" early and prints the real
+        // answer later, after the prompt - where it used to be taken as the answer to the NEXT
+        // request (seen on this car, testdata/2026-11-18_wifi_29bit-late-replies.log).
+        // Replies that don't belong to this request are skipped; after a NO DATA (or "?") the late
+        // answer gets a short grace period.
+        // A NO DATA or "?" may itself be stale (the clone printed one late for an earlier request),
+        // so it is held during the grace period and returned only if nothing better arrives.
+        var held: ElmResult? = null
+        val result = withTimeoutOrNull(timeoutMs) {
+            var answer: ElmResult? = null
+            while (answer == null) {
+                val outcome = if (held != null) {
+                    withTimeoutOrNull(LATE_REPLY_GRACE_MS) { nextFrame() } ?: break
+                } else {
+                    nextFrame()
+                }
+                answer = when (outcome) {
+                    Outcome.LinkClosed -> ElmResult.Error("Link closed")
+                    is Outcome.Frame -> when (val parsed = ElmResponseParser.parse(command, outcome.text)) {
+                        is ElmResult.Ok -> filter.keep(parsed.lines).takeIf { it.isNotEmpty() }?.let { ElmResult.Ok(it) }
+                        ElmResult.NoData -> null.also { if (held == null) held = parsed }
+                        is ElmResult.Error -> if (parsed.message == "?") null.also { if (held == null) held = parsed } else parsed
+                        ElmResult.Timeout -> parsed
+                    }
+                }
+            }
+            answer
+        }
+        return result ?: held ?: ElmResult.Timeout
     }
 
     companion object {
         const val DEFAULT_TIMEOUT_MS = 2_000L
+
+        /** After a NO DATA or "?", how long a late answer to the same request is still accepted. */
+        const val LATE_REPLY_GRACE_MS = 300L
     }
 }

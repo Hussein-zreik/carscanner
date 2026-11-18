@@ -45,11 +45,11 @@ class DiagnosticsReader(
          */
         suspend fun messages(cmd: String, what: String, noDataIsProblem: Boolean = true): List<EcuMessage>? {
             // The clone drops replies (seen on this car): retry an important read before giving up.
-            var r = elm.execute(cmd)
+            var r = elm.obdRequest(cmd, protocol, headersOn)
             var attempt = 1
             while (noDataIsProblem && attempt < READ_ATTEMPTS && (r == ElmResult.NoData || r == ElmResult.Timeout)) {
                 delay(RETRY_PAUSE_MS)
-                r = elm.execute(cmd)
+                r = elm.obdRequest(cmd, protocol, headersOn)
                 attempt++
             }
             return when (r) {

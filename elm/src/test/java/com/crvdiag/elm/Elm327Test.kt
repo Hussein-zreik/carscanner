@@ -52,4 +52,51 @@ class Elm327Test {
         assertTrue(elm.execute("ATI") is ElmResult.Error)
         assertEquals(null, elm.closed.await())
     }
+
+    // --- reply filter (late answers from the clone, 2026-11-18) ---
+
+    private val speedOnly = ReplyFilter { lines -> lines.filter { "410D" in it } }
+    private val obdPolicy = CompositePolicy(AdapterCommandPolicy, CommandPolicy { Verdict.Allowed })
+
+    @Test
+    fun `stale reply is skipped and the real answer returned`() = runTest {
+        val adapter = ScriptedAdapter(mapOf("010D" to "18DAF11104410C17B0\r\r>18DAF11103410D00\r\r"), echo = false)
+        val elm = Elm327(adapter, obdPolicy).also { it.start(backgroundScope) }
+        assertEquals(ElmResult.Ok(listOf("18DAF11103410D00")), elm.execute("010D", filter = speedOnly))
+    }
+
+    @Test
+    fun `late answer after NO DATA is accepted within the grace period`() = runTest {
+        val adapter = ScriptedAdapter(mapOf("010D" to "NO DATA\r\r>18DAF11103410D00\r\r"), echo = false)
+        val elm = Elm327(adapter, obdPolicy).also { it.start(backgroundScope) }
+        assertEquals(ElmResult.Ok(listOf("18DAF11103410D00")), elm.execute("010D", filter = speedOnly))
+    }
+
+    @Test
+    fun `NO DATA with only stale data stays NO DATA`() = runTest {
+        val adapter = ScriptedAdapter(mapOf("010D" to "NO DATA\r\r>18DAF11104410C17B0\r\r"), echo = false)
+        val elm = Elm327(adapter, obdPolicy).also { it.start(backgroundScope) }
+        assertEquals(ElmResult.NoData, elm.execute("010D", filter = speedOnly))
+    }
+
+    @Test
+    fun `without a filter the first reply is still the answer`() = runTest {
+        val adapter = ScriptedAdapter(mapOf("010D" to "18DAF11104410C17B0\r\r>18DAF11103410D00\r\r"), echo = false)
+        val elm = Elm327(adapter, obdPolicy).also { it.start(backgroundScope) }
+        assertEquals(ElmResult.Ok(listOf("18DAF11104410C17B0")), elm.execute("010D"))
+    }
+
+    @Test
+    fun `stale question mark is not the answer when the real one follows`() = runTest {
+        val adapter = ScriptedAdapter(mapOf("010D" to "?\r\r>18DAF11103410D00\r\r"), echo = false)
+        val elm = Elm327(adapter, obdPolicy).also { it.start(backgroundScope) }
+        assertEquals(ElmResult.Ok(listOf("18DAF11103410D00")), elm.execute("010D", filter = speedOnly))
+    }
+
+    @Test
+    fun `a real question mark is still returned after the grace period`() = runTest {
+        val adapter = ScriptedAdapter(mapOf("010C0D" to "?\r\r"), echo = false)
+        val elm = Elm327(adapter, obdPolicy).also { it.start(backgroundScope) }
+        assertEquals(ElmResult.Error("?"), elm.execute("010C0D", filter = speedOnly))
+    }
 }

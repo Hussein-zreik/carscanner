@@ -229,8 +229,7 @@ class SelfTestReader(
     private val engineResponseId: String?,
 ) {
     private suspend fun engineMessage(cmd: String): EcuMessage? {
-        val r = elm.execute(cmd) as? com.crvdiag.elm.ElmResult.Ok ?: return null
-        val msgs = ObdMessages.collect(r.lines, protocol, headersOn)
+        val (_, msgs) = elm.obdRead(cmd, protocol, headersOn, attempts = 2)
         return msgs.firstOrNull { it.ecu == engineResponseId } ?: msgs.maxByOrNull { it.payload.size }
     }
 

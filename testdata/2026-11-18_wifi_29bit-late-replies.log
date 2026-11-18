@@ -1,0 +1,56 @@
+# CR-V Diag recording #3 — first full use of 0.11.0 on the car (excerpts)
+# Date: 2026-11-18 · Tablet: Galaxy Tab A9+ · Adapter: V03H4 clone over Wi-Fi 192.168.0.10:35000
+# Source: Advanced → Copy log, emailed by the owner as PDF; excerpts transcribed line by line (exact).
+# Car state: engine running (warm idle, ATRV 13.6–14.1 V) except the clear-codes part (engine off, RPM 0).
+# FINDINGS:
+#  1. Late replies: the clone answers NO DATA early, then prints the real answer after its prompt, where the
+#     app took it as the answer to the NEXT request (010D got the 410C answer, ...). Fixed in 0.12.0:
+#     replies must match the request (service + PID), stale ones are skipped, late answers get 300 ms grace.
+#  2. Junk after the prompt: tails of earlier, longer replies (">4\r18DAF11122...", ">C\r\r>") are repeated
+#     by the clone's Wi-Fi bridge. Not from the app's reader (StreamTransport emits exactly n bytes).
+#  3. Clear codes: both units answered 7F 04 78 (NRC 0x78 = "received, answer pending"), NOT a refusal.
+#     The clear had worked (0101 afterwards: MIL off, 0 codes, monitors reset). Fixed in 0.12.0.
+#  4. VIN: only the first ISO-TP frame arrived (consecutive frames dropped) → VIN missing. Fixed: retried.
+#  5. Codes: P0497 + P145C pending at 21:22, STORED with MIL ON at 21:55 (0101 A=0x82), permanent (0A).
+#  6. Mode 06 misfire counters: cylinder 3 = 9 this cycle / 5 average (21:58), others 0–1.
+# --- excerpt A: one-behind live data (multi-PID refused with "?", then single PIDs) ---
+21:22:33.980 TX 010C0D0504110B\r
+21:22:33.999 RX 18DAF11D064100983A8003\r18DAF111064100BE3FA813\r\r>
+21:22:34.001 TX 01100F0E060715\r
+21:22:34.009 RX 18DAF11D064100983A8003\r18DAF111064100BE3FA813\r\r>?\r\r>
+21:22:34.011 TX 01031F\r
+21:22:34.015 RX ?\r\r>
+21:22:34.016 TX 010C\r
+21:22:34.502 RX NO DATA\r\r>
+21:22:34.504 TX 010D\r
+21:22:34.514 RX 18DAF11D04410C17A4\r18DAF11104410C17B0\r\r>
+21:22:34.515 TX 0105\r
+21:22:34.714 RX 18DAF11103410D00\r18DAF11D03410D00\r\r>0\r\r>
+21:22:34.718 TX 0104\r
+21:22:35.316 RX 18DAF11103410541\r18DAF11D03410541\r\r>0\r\r>
+# --- excerpt B: NO DATA followed by the late answer in the same chunk ---
+22:01:09.834 TX 010D\r
+22:01:09.842 RX NO DATA\r\r>18DAF11D04410C2624\r18DAF11104410C2620\r\r>
+# --- excerpt C: clear codes (engine off) answered with NRC 0x78, then the re-read ---
+22:03:12.397 INFO Clear codes: confirmed by user
+22:03:12.398 TX 010C\r
+22:03:12.718 RX 18DAF11D04410C0000\r18DAF11104410C0000\r\r>
+22:03:12.721 TX 04\r
+22:03:13.024 RX 18DAF111037F0478\r18DAF11D037F0478\r\r>0\r\r>
+22:03:13.027 INFO Clear codes: Clear failed: 18DAF111: refused (code 0x78), 18DAF11D: refused (code 0x78)
+22:03:13.029 TX 0101\r
+22:03:13.238 RX 18DAF1110641010007E5E5\r18DAF11D06410100040000\r\r>
+# --- excerpt D: VIN with only the first frame delivered ---
+22:03:59.625 TX 0902\r
+22:04:00.134 RX 18DAF1111014490201354A36\r\r>
+# --- excerpt E: misfire counters with junk tails (cylinder 3: 9 this cycle, 5 average) ---
+21:58:01.987 TX 06A2\r
+21:58:02.234 RX 18DAF111101346A20B240000\r18DAF111210000FFFFA20C24\r18DAF1112200010000FFFF55\r\r>
+21:58:02.238 TX 06A3\r
+21:58:02.448 RX NO DATA\r\r>
+21:58:02.450 TX 06A4\r
+21:58:02.846 RX 18DAF111101346A40B240005\r18DAF111210000FFFFA40C24\r18DAF1112200090000FFFF55\r\r>
+21:58:02.850 TX 06A5\r
+21:58:03.061 RX 18DAF111101346A50B240001\r18DAF111210000FFFFA50C24\r18DAF1112200000000FFFF55\r\r>
+21:58:03.065 TX 010C\r
+21:58:03.460 RX 18DAF11104410C0A2C\r18DAF11D04410C0A00\r\r>FFFA50C24\r18DAF1112200000000FFFF55\r\r>
