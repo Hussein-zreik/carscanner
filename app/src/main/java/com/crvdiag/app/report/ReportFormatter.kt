@@ -48,14 +48,13 @@ object ReportFormatter {
 
     fun summary(input: ReportInput): String {
         val d = input.data.diagnostics
-        val mil = d.readiness.values.any { it.milOn }
         val main = d.readiness.values.maxByOrNull { r -> r.monitors.count { it.available } }
         val available = main?.monitors?.filter { it.available }.orEmpty()
         return listOfNotNull(
-            if (mil) "MIL ON" else "MIL off",
-            "${d.stored.values.flatten().size} stored",
-            "${d.pending.values.flatten().size} pending",
-            "${input.data.permanent.values.flatten().size} permanent",
+            when (d.milOn) { true -> "MIL ON"; false -> "MIL off"; null -> "MIL unknown" },
+            if (d.storedRead) "${d.stored.values.flatten().size} stored" else "stored not read",
+            if (d.pendingRead) "${d.pending.values.flatten().size} pending" else "pending not read",
+            if (input.data.permanentRead) "${input.data.permanent.values.flatten().size} permanent" else "permanent not read",
             main?.let { "${available.count { it.complete }}/${available.size} self-tests" },
         ).joinToString(" · ")
     }
@@ -102,15 +101,30 @@ object ReportFormatter {
         blocks += Block.Table(listOf("System", "Status"), scanned + notScanned, listOf(0.38f, 0.62f))
 
         // Codes
-        val mil = d.readiness.values.any { it.milOn }
         blocks += Block.Heading("Trouble codes")
-        blocks += Block.Fields(listOf(Field("Check-engine light (MIL)", if (mil) "ON" else "OFF", if (mil) Tone.Bad else Tone.Good)))
+        blocks += Block.Fields(listOf(
+            when (d.milOn) {
+                true -> Field("Check-engine light (MIL)", "ON", Tone.Bad)
+                false -> Field("Check-engine light (MIL)", "OFF", Tone.Good)
+                null -> Field("Check-engine light (MIL)", "UNKNOWN: status could not be read", Tone.Warn)
+            },
+        ))
+        val unread = listOfNotNull(
+            "stored".takeIf { !d.storedRead }, "pending".takeIf { !d.pendingRead }, "permanent".takeIf { !input.data.permanentRead },
+        )
+        if (unread.isNotEmpty()) {
+            blocks += Block.Text("Could not be read: ${unread.joinToString()} codes. Missing codes in this report do NOT mean the car has none.", Tone.Warn)
+        }
+        if (d.milWithoutStoredCode) {
+            blocks += Block.Text("The check-engine light is ON but no stored code was received. Re-scan, and confirm with a Honda-capable tool.", Tone.Bad)
+        }
         val codeRows = buildList {
             d.stored.forEach { (ecu, codes) -> codes.forEach { add(Row(listOf(it, "Stored", input.describeCode(it), label(ecu)), Tone.Bad)) } }
             input.data.permanent.forEach { (ecu, codes) -> codes.forEach { add(Row(listOf(it, "Permanent", input.describeCode(it), label(ecu)), Tone.Bad)) } }
             d.pending.forEach { (ecu, codes) -> codes.forEach { add(Row(listOf(it, "Pending", input.describeCode(it), label(ecu)), Tone.Warn)) } }
         }
-        if (codeRows.isEmpty()) blocks += Block.Text("No stored, pending or permanent codes in the scanned systems.", Tone.Good)
+        if (codeRows.isEmpty() && unread.isEmpty()) blocks += Block.Text("No stored, pending or permanent codes in the scanned systems.", Tone.Good)
+        else if (codeRows.isEmpty()) blocks += Block.Text("No codes received from the parts that could be read.", Tone.Warn)
         else blocks += Block.Table(listOf("Code", "Type", "Description", "Module"), codeRows, listOf(0.12f, 0.14f, 0.48f, 0.26f))
         blocks += Block.Text(
             "Stored = confirmed fault. Pending = seen once, not confirmed. Permanent = confirmed fault that clearing codes " +

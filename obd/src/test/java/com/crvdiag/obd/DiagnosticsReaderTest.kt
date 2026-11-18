@@ -4,6 +4,7 @@ import com.crvdiag.elm.Elm327
 import com.crvdiag.elm.ElmProtocol
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -49,6 +50,37 @@ class DiagnosticsReaderTest {
         val values = frame.values.associate { it.pid to it.value }
         assertEquals(850.0, values[0x0C])
         assertEquals(85.0, values[0x05])
+    }
+
+    @Test
+    fun `NO DATA to stored codes is a failed read, never 'no codes'`() = runTest {
+        val (_, report) = read(car + ("03" to "NO DATA\r\r"))
+        assertEquals(false, report.storedRead)
+        assertTrue(report.stored.isEmpty())
+        assertTrue("Stored codes: no answer from the car" in report.problems)
+    }
+
+    @Test
+    fun `unread readiness means the light's state is unknown, not OFF`() = runTest {
+        val (_, report) = read(car + ("0101" to "NO DATA\r\r"))
+        assertEquals(null, report.milOn)
+        assertEquals(false, report.readinessRead)
+    }
+
+    @Test
+    fun `light ON with no stored code is flagged (owner's 2026-11-18 symptom)`() = runTest {
+        // MIL bit set (A = 0x81: MIL on, 1 code) but mode 03 returns zero codes.
+        val (_, report) = read(car + ("0101" to "7E8064101 8107E5A5\r\r"))
+        assertEquals(true, report.milOn)
+        assertTrue(report.milWithoutStoredCode)
+    }
+
+    @Test
+    fun `stored EVAP code with the light ON is shown`() = runTest {
+        val (_, report) = read(car + ("0101" to "7E8064101 8107E5A5\r\r") + ("03" to "7E80443 01145C\r7E9024300\r\r"))
+        assertEquals(true, report.milOn)
+        assertEquals(listOf("P145C"), report.stored["7E8"])
+        assertFalse(report.milWithoutStoredCode)
     }
 
     @Test

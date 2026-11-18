@@ -176,11 +176,12 @@ private fun ConnectionTile(
 @Composable
 private fun EngineLightTile(state: CodesState, connected: Boolean, onOpen: () -> Unit, modifier: Modifier) {
     val report = (state as? CodesState.Done)?.report
-    val mil = report?.readiness?.values?.any { it.milOn }
+    val mil = report?.milOn
     val stored = report?.stored?.values?.flatten().orEmpty()
     val pending = report?.pending?.values?.flatten().orEmpty()
     val status = when {
         report == null -> Status.Neutral
+        mil == null || !report.storedRead || report.milWithoutStoredCode -> Status.Warning
         mil == true || stored.isNotEmpty() -> Status.Fault
         pending.isNotEmpty() -> Status.Warning
         else -> Status.Ok
@@ -197,12 +198,19 @@ private fun EngineLightTile(state: CodesState, connected: Boolean, onOpen: () ->
                 MutedText(if (connected) "Codes not read yet." else "Connect to read the car's codes.")
             }
             else -> {
-                BigValue(if (mil == true) "ON" else "OFF", if (mil == true) Status.Fault else Status.Ok)
-                MutedText(
-                    "${if (stored.isEmpty()) "No" else stored.size} stored code${if (stored.size == 1) "" else "s"} · " +
-                        "${if (pending.isEmpty()) "no" else pending.size} pending" +
-                        (pending.takeIf { it.isNotEmpty() }?.joinToString(prefix = " (", postfix = ")") ?: ""),
+                BigValue(
+                    when (mil) { true -> "ON"; false -> "OFF"; null -> "Unknown" },
+                    when (mil) { true -> Status.Fault; false -> Status.Ok; null -> Status.Warning },
                 )
+                when {
+                    !report.storedRead -> Text("Couldn't read the stored codes. Open Codes and tap Read again.", color = Status.Warning.color())
+                    report.milWithoutStoredCode -> Text("Light is ON but no code was received. Open Codes and tap Read again.", color = Status.Warning.color())
+                    else -> MutedText(
+                        "${if (stored.isEmpty()) "No" else stored.size} stored code${if (stored.size == 1) "" else "s"} · " +
+                            "${if (pending.isEmpty()) "no" else pending.size} pending" +
+                            (pending.takeIf { it.isNotEmpty() }?.joinToString(prefix = " (", postfix = ")") ?: ""),
+                    )
+                }
             }
         }
         Spacer(Modifier.weight(1f))

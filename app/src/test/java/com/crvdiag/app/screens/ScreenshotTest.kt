@@ -225,6 +225,15 @@ class ScreenshotTest {
         }
     }
 
+    @Test fun codesMilWithoutCode() {
+        connected()
+        codes.showPreviewState(CodesState.Done(diagnostics.copy(
+            readiness = mapOf("7E8" to Readiness.decode(0x81, 0x07, 0xE5, 0xA5)),
+            stored = emptyMap(), storedRead = false, problems = listOf("Stored codes: no answer from the car"),
+        )))
+        shoot("12-codes-mil-unread", Destination.Codes) { CodesScreen(connection, codes, null) {} }
+    }
+
     @Test fun maintenance() {
         shoot("10-maintenance", Destination.Maintenance) { MaintenanceScreen(service) }
     }

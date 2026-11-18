@@ -15,7 +15,7 @@ import java.time.ZonedDateTime
 class ReportFormatterTest {
     private val ecus = EcuDiscovery.fromPid00(listOf("7E8064100BE3FA813", "7E9064100983A8003"), ElmProtocol.CAN_11_500)
 
-    private fun input(vin: String?, pending: List<String> = listOf("P145C")) = ReportInput(
+    private fun input(vin: String?, pending: List<String> = listOf("P145C"), storedRead: Boolean = true) = ReportInput(
         type = ReportType.PreRepair, notes = "Before EVAP purge valve replacement",
         createdAt = ZonedDateTime.of(2026, 11, 17, 15, 30, 0, 0, ZoneOffset.UTC), appVersion = "0.8.0",
         adapterId = "ELM327 v1.5", protocolLabel = "CAN 11-bit 500 kbps", voltage = "12.1V",
@@ -24,7 +24,7 @@ class ReportFormatterTest {
             DiagnosticsReport(
                 readiness = mapOf("7E8" to Readiness.decode(0x00, 0x07, 0xE5, 0xA5)),
                 stored = mapOf("7E8" to emptyList()), pending = mapOf("7E8" to pending),
-                freezeFrames = emptyMap(), problems = emptyList(),
+                freezeFrames = emptyMap(), problems = emptyList(), storedRead = storedRead,
             ),
             permanent = mapOf("7E8" to emptyList()), vin = vin, calibrationIds = emptyMap(), ecuNames = emptyMap(),
             misfires = listOf(MisfireCount(1, 0, 0), MisfireCount(2, 0, 0)),
@@ -59,6 +59,15 @@ class ReportFormatterTest {
         val other = text(ReportFormatter.build(input("1HGCM82633A004352")))
         assertTrue(other.contains("Matches this car's VIN: NO"))
         assertTrue(text(ReportFormatter.build(input(null))).contains("VIN reported by the car: Not reported"))
+    }
+
+    @Test
+    fun `unread stored codes are never reported as none`() {
+        val built = input("5J6RE4H50BL017022", pending = emptyList(), storedRead = false)
+        val t = text(ReportFormatter.build(built))
+        assertTrue(t.contains("Could not be read: stored codes"))
+        assertTrue(!t.contains("No stored, pending or permanent codes"))
+        assertTrue(ReportFormatter.summary(built).contains("stored not read"))
     }
 
     @Test

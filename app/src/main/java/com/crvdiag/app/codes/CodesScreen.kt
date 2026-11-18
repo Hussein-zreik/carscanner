@@ -159,30 +159,41 @@ private fun describe(code: String) = HondaDtcText.describe(code) ?: DtcText.desc
 
 @Composable
 private fun ReportView(report: DiagnosticsReport, ecus: List<EcuInfo>) {
-    val mil = report.readiness.values.any { it.milOn }
+    val mil = report.milOn
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            val milStatus = when (mil) { true -> Status.Fault; false -> Status.Ok; null -> Status.Warning }
             SectionCard(
                 "Check-engine light", Modifier.fillMaxWidth(),
-                icon = if (mil) Icons.Filled.Warning else Icons.Filled.CheckCircle,
-                iconTint = (if (mil) Status.Fault else Status.Ok).color(),
+                icon = if (mil == false) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+                iconTint = milStatus.color(),
             ) {
-                BigValue(if (mil) "ON" else "OFF", if (mil) Status.Fault else Status.Ok)
+                BigValue(when (mil) { true -> "ON"; false -> "OFF"; null -> "Unknown" }, milStatus)
                 MutedText(
-                    if (mil) "The car has confirmed a fault. See the stored codes below."
-                    else "No confirmed fault is turning the light on.",
+                    when (mil) {
+                        true -> "The car has confirmed a fault. See the stored codes below."
+                        false -> "No confirmed fault is turning the light on."
+                        null -> "The car didn't answer the status request, so the light's state is unknown. Tap Read again."
+                    },
                 )
+                if (report.milWithoutStoredCode) {
+                    Text(
+                        "The light is ON but no stored code was received. The read was incomplete or the code is only " +
+                            "visible to a Honda-capable tool. Tap Read again; if it stays empty, compare with Car Scanner.",
+                        color = Status.Warning.color(), fontWeight = FontWeight.SemiBold,
+                    )
+                }
                 report.problems.forEach {
                     Text("Some data could not be read: $it", color = Status.Warning.color(), style = MaterialTheme.typography.bodySmall)
                 }
             }
             CodeList(
                 "Stored codes", "Confirmed faults. These turn the check-engine light on.",
-                report.stored, ecus, Status.Fault, "No stored codes",
+                report.stored, ecus, Status.Fault, "No stored codes", read = report.storedRead,
             )
             CodeList(
                 "Pending codes", "Seen once, not confirmed yet. They clear themselves if the problem doesn't return.",
-                report.pending, ecus, Status.Warning, "No pending codes",
+                report.pending, ecus, Status.Warning, "No pending codes", read = report.pendingRead,
             )
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -210,12 +221,20 @@ private fun CodeList(
     ecus: List<EcuInfo>,
     status: Status,
     empty: String,
+    read: Boolean = true,
 ) {
     val all = codes.flatMap { (ecu, list) -> list.map { ecu to it } }
-    SectionCard(title, Modifier.fillMaxWidth(), icon = if (all.isEmpty()) Icons.Filled.CheckCircle else Icons.Filled.Warning,
-        iconTint = (if (all.isEmpty()) Status.Ok else status).color()) {
+    val iconStatus = when {
+        !read -> Status.Warning
+        all.isEmpty() -> Status.Ok
+        else -> status
+    }
+    SectionCard(title, Modifier.fillMaxWidth(), icon = if (iconStatus == Status.Ok) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+        iconTint = iconStatus.color()) {
         MutedText(explanation)
-        if (all.isEmpty()) Text(empty, color = Status.Ok.color())
+        if (!read) Text("Couldn't read: the car didn't answer. This does NOT mean there are no codes. Tap Read again.",
+            color = Status.Warning.color(), fontWeight = FontWeight.SemiBold)
+        else if (all.isEmpty()) Text(empty, color = Status.Ok.color())
         all.forEach { (ecu, code) ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(shape = MaterialTheme.shapes.small, color = status.color().copy(alpha = 0.15f)) {

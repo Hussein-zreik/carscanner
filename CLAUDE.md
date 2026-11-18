@@ -203,6 +203,10 @@ Honda-specific request IDs are **unknown until captured** from the car (sniffing
 - **SRS (airbag) warning light reported NOT off with engine running (2026-11-17)** → real airbag
   fault likely; car has front-end salvage history. App cannot read SRS until Phase 3 (K-line, MX+).
   Owner advised to get a professional Honda-capable SRS scan.
+- **Bug report 2026-11-18 (owner):** check-engine light ON, CR-V Diag showed no code, Car Scanner showed
+  the EVAP code. Fixed display defects in 0.8.1: NO DATA to 03/07/0101 is now a failed read (never
+  "no codes"), unread MIL = "Unknown" (never "OFF"), MIL ON + no stored code = explicit warning.
+  **Root cause not yet confirmed: owner's log/data did not arrive; ask for it.**
 - Battery (ATRV, engine off, ignition on, 2026-11-17): 12.1 V → 11.8 V. Recheck resting (≥12.4 V)
   and running (13.7–14.7 V) voltage.
 - Car history: salvage-titled 2017 (front-end), repaired 2018; odometer branded "not actual" — the

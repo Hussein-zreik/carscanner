@@ -84,6 +84,8 @@ data class ScanData(
     val calibrationIds: Map<String, List<String>>,
     val ecuNames: Map<String, String>,
     val misfires: List<MisfireCount>,
+    /** False when the permanent-code request got no usable answer. */
+    val permanentRead: Boolean = true,
 )
 
 class ScanReportCollector(
@@ -98,13 +100,14 @@ class ScanReportCollector(
         suspend fun messages(cmd: String, what: String): List<EcuMessage> =
             when (val r = elm.execute(cmd)) {
                 is com.crvdiag.elm.ElmResult.Ok -> ObdMessages.collect(r.lines, protocol, headersOn)
-                com.crvdiag.elm.ElmResult.NoData -> emptyList()
+                com.crvdiag.elm.ElmResult.NoData -> emptyList() // optional items (VIN, CAL ID, mode 06 MIDs)
                 com.crvdiag.elm.ElmResult.Timeout -> emptyList<EcuMessage>().also { problems += "$what: no reply (timeout)" }
                 is com.crvdiag.elm.ElmResult.Error -> emptyList<EcuMessage>().also { problems += "$what: ${r.message}" }
             }
 
         onStep("Permanent codes (0A)")
         val permanent = messages("0A", "Permanent codes").mapNotNull { m -> Dtcs.fromMessage(m, 0x4A)?.let { m.ecu to it } }.toMap()
+        if (permanent.isEmpty()) problems += "Permanent codes: no usable answer (older units may not support them)"
         onStep("VIN (0902)")
         val vin = messages("0902", "VIN").firstNotNullOfOrNull(VehicleInfo::vin)
         onStep("Calibration IDs (0904)")
@@ -124,6 +127,6 @@ class ScanReportCollector(
                 )
             }
         }
-        return ScanData(diagnostics.copy(problems = problems), permanent, vin, cal, names, misfires)
+        return ScanData(diagnostics.copy(problems = problems), permanent, vin, cal, names, misfires, permanentRead = permanent.isNotEmpty())
     }
 }
